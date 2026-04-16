@@ -1,0 +1,31 @@
+# Build outputs
+build/
+out/
+
+# vcpkg installed packages (restored from manifest)
+vcpkg_installed/
+
+# Simulation outputs (regenerated per run)
+output/
+
+# IDE / editor
+.vs/
+.vscode/
+*.user
+*.suo
+*.sln.docstates
+
+# Compiled objects
+*.obj
+*.o
+*.pdb
+*.ilk
+*.exp
+*.lib
+*.dll
+*.exe
+
+# OS junk
+Thumbs.db
+desktop.ini
+.DS_Store

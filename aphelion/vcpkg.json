@@ -1,0 +1,13 @@
+{
+  "name": "aphelion",
+  "version": "1.0.0",
+  "description": "Aphelion Research — High-performance simulation engine",
+  "builtin-baseline": "e5a1490e1409d175932ef6014519e9ae149ddb7c",
+  "dependencies": [
+    {
+      "name": "arrow",
+      "features": ["parquet"]
+    },
+    "quantlib"
+  ]
+}

@@ -1,0 +1,53 @@
+{
+  "symbol": "XAUUSD",
+  "timeframe": "M12",
+  "dataset": "bars",
+  "created_at": "2026-04-16T20:50:00.410101+00:00",
+  "updated_at": "2026-04-16T20:50:00.476714+00:00",
+  "requested_start": "2000-01-01T00:00:00+00:00",
+  "requested_end": "2030-01-01T00:00:00+00:00",
+  "next_bar_pos": 429797,
+  "tick_next_from": null,
+  "parts": [
+    {
+      "file": "bars_pos_000000000_000099999.parquet",
+      "pos_start": 0,
+      "pos_count": 100000,
+      "rows": 100000,
+      "min_time": "2022-12-20T15:00:00+00:00",
+      "max_time": "2026-04-16T23:48:00+00:00"
+    },
+    {
+      "file": "bars_pos_000100000_000199999.parquet",
+      "pos_start": 100000,
+      "pos_count": 100000,
+      "rows": 100000,
+      "min_time": "2019-10-10T12:36:00+00:00",
+      "max_time": "2022-12-20T14:48:00+00:00"
+    },
+    {
+      "file": "bars_pos_000200000_000299999.parquet",
+      "pos_start": 200000,
+      "pos_count": 100000,
+      "rows": 100000,
+      "min_time": "2016-06-30T02:48:00+00:00",
+      "max_time": "2019-10-10T12:24:00+00:00"
+    },
+    {
+      "file": "bars_pos_000300000_000399999.parquet",
+      "pos_start": 300000,
+      "pos_count": 100000,
+      "rows": 100000,
+      "min_time": "2013-01-16T22:12:00+00:00",
+      "max_time": "2016-06-30T02:36:00+00:00"
+    },
+    {
+      "file": "bars_pos_000400000_000429796.parquet",
+      "pos_start": 400000,
+      "pos_count": 29797,
+      "rows": 29797,
+      "min_time": "2000-06-20T00:00:00+00:00",
+      "max_time": "2013-01-16T22:00:00+00:00"
+    }
+  ]
+}

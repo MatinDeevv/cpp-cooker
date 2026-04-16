@@ -1,0 +1,21 @@
+{
+  "symbol": "XAUUSD",
+  "timeframe": "H6",
+  "dataset": "bars",
+  "created_at": "2026-04-16T20:50:00.686916+00:00",
+  "updated_at": "2026-04-16T20:50:00.695226+00:00",
+  "requested_start": "2000-01-01T00:00:00+00:00",
+  "requested_end": "2030-01-01T00:00:00+00:00",
+  "next_bar_pos": 18597,
+  "tick_next_from": null,
+  "parts": [
+    {
+      "file": "bars_pos_000000000_000018596.parquet",
+      "pos_start": 0,
+      "pos_count": 18597,
+      "rows": 18597,
+      "min_time": "2000-06-20T00:00:00+00:00",
+      "max_time": "2026-04-16T18:00:00+00:00"
+    }
+  ]
+}
