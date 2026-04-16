@@ -1,0 +1,38 @@
+# ── Data directories (large Parquet / binary files) ──
+data/
+data_backfill_latest_first/
+data_sim_ready/
+
+# ── Python / MT5 downloader artifacts ──
+__pycache__/
+*.pyc
+.env
+
+# ── Aphelion build outputs ──
+aphelion/build/
+aphelion/out/
+aphelion/vcpkg_installed/
+aphelion/output/
+aphelion/custom-triplets/
+
+# ── IDE / editor ──
+.vs/
+.vscode/
+*.user
+*.suo
+*.sln.docstates
+
+# ── Compiled objects ──
+*.obj
+*.o
+*.pdb
+*.ilk
+*.exp
+*.lib
+*.dll
+*.exe
+
+# ── OS junk ──
+Thumbs.db
+desktop.ini
+.DS_Store
