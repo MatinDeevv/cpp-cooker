@@ -31,6 +31,10 @@ set(ENGINE_SOURCES
     src/tournament.cpp
     src/reporting.cpp
     src/replay_engine.cpp
+    src/multi_timeframe.cpp
+    src/features.cpp
+    src/regime.cpp
+    src/risk_manager.cpp
 )
 
 add_executable(aphelion ${ENGINE_SOURCES})

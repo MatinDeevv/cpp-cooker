@@ -1,0 +1,89 @@
+================================================================
+ APHELION RESEARCH — Simulation Engine v3.0.0
+================================================================
+ Symbol:       XAUUSD
+ Timeframe:    H1
+ Accounts:     100
+ Max leverage: 500
+ Risk/trade:   0.01
+ Stop-out:     50%
+ Strategy:     ContextAwareSma (V3) (id=1)
+ Mode:         FULL
+ Data root:    C:\Users\marti\LLM\data_sim_ready
+ Output:       output
+================================================================
+
+[phase 1] Initializing calendar...
+
+[phase 2] Loading market data...
+[ingest] Loading 1 parquet files for XAUUSD H1... 93384 bars loaded (7 MB tape)
+[phase 2] Data loaded in 0.0232349 s
+  Primary bars:  93384
+  Tape size:     7 MB
+
+[phase 3] Setting up tournament...
+[tournament] Initialized 100 accounts (strategy=1) with SMA periods [5-50] / [20-200]
+
+[phase 4] Running simulation...
+[tournament] Computing market features...[features] Computed 93384 bar features (7295 KB feature tape)
+ done
+[tournament] Classifying regimes...[regime] Classification complete over 93384 bars:
+  TRENDING_UP: 10618 (11.4%)
+  TRENDING_DOWN: 6516 (7.0%)
+  RANGE_BOUND: 64017 (68.6%)
+  VOLATILE_EXPANSION: 3 (0.0%)
+  COMPRESSION: 181 (0.2%)
+  TRANSITION: 12049 (12.9%)
+[tournament] Preparing strategies... done
+[tournament] Running replay over 93384 bars x 100 accounts...
+[tournament] Replay complete:
+  Bars processed:   93384
+  Accounts:         100
+  Total fills:      103301
+  Total rejects:    35515
+  Total stop-outs:  0
+  Total SL/TP:      80704
+  Total signals:    153047
+  Risk vetoes:      0
+  Skipped (liq):    0
+  Elapsed:          0.1 s
+  Bars/sec:         1160951
+  Acct*Bars/sec:    116095104
+
+[phase 5] Writing outputs...
+[report] Wrote "output\\summary.csv" (100 rows)
+[report] Wrote "output\\run_metadata.json"
+
+==================== LEADERBOARD (top 20) — ranked by composite quality ====================
+Rank Acct  Equity      Ret%      MaxDD%   WR%     PF      Trd    RiskAdj Cons   CompositeF     S     Liq  
+1    94    10849.5     8.49      8.6      42.9    1.09    487    0.99    0.72   6.13     47    190   no   
+2    97    10690.4     6.90      9.2      41.8    1.07    490    0.75    0.73   5.67     49    196   no   
+3    80    10388.6     3.89      12.6     41.8    1.04    550    0.31    0.74   4.74     41    165   no   
+4    98    10279.5     2.80      9.4      41.5    1.03    482    0.30    0.74   4.46     49    198   no   
+5    89    10094.8     0.95      9.5      41.6    1.01    505    0.10    0.71   3.84     45    181   no   
+6    91    10022.8     0.23      12.0     41.3    1.00    499    0.02    0.73   3.67     46    185   no   
+7    99    9983.7      -0.16     10.8     40.9    1.00    467    -0.02   0.71   3.51     50    200   no   
+8    90    9900.3      -1.00     14.4     41.9    0.99    497    -0.07   0.76   3.38     45    183   no   
+9    93    9871.6      -1.28     14.4     40.8    0.98    463    -0.09   0.76   3.29     47    189   no   
+10   75    9749.1      -2.51     12.9     41.2    0.98    577    -0.20   0.73   2.87     39    156   no   
+11   88    9570.7      -4.29     12.4     40.1    0.96    496    -0.35   0.74   2.38     45    180   no   
+12   95    9407.3      -5.93     14.8     40.9    0.93    457    -0.40   0.77   1.96     48    192   no   
+13   92    9303.7      -6.96     13.9     40.6    0.92    475    -0.50   0.79   1.70     46    187   no   
+14   76    9286.7      -7.13     18.9     40.0    0.91    532    -0.38   0.76   1.61     39    158   no   
+15   83    9173.7      -8.26     17.8     40.0    0.89    520    -0.46   0.77   1.30     42    170   no   
+16   85    9115.8      -8.84     17.7     39.6    0.88    495    -0.50   0.80   1.19     43    174   no   
+17   79    9132.7      -8.67     19.2     38.8    0.89    518    -0.45   0.77   1.18     40    163   no   
+18   96    9083.6      -9.16     15.3     38.5    0.89    473    -0.60   0.78   1.07     48    194   no   
+19   77    9088.5      -9.11     17.6     38.4    0.89    531    -0.52   0.76   1.04     40    160   no   
+20   24    9014.1      -9.86     18.5     39.4    0.94    1346   -0.53   0.75   0.90     15    63    no   
+================================================================
+
+
+================================================================
+ COMPLETE — v3.0.0
+ Total elapsed:    1.59 s
+ Simulation:       0.26 s
+ Data load:        0.02 s
+ Acct*Bars/sec:    116095104
+ Signals fired:    153047
+================================================================

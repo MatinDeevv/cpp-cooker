@@ -2,12 +2,19 @@
 // ============================================================
 // Aphelion Research — Tournament Orchestration (Layer G)
 // Runs N simulations over one replay stream, ranks, outputs
+//
+// V3: Feature/regime computation, composite scoring,
+//     context-aware strategy support, dynamic risk
 // ============================================================
 
 #include "aphelion/types.h"
 #include "aphelion/account.h"
 #include "aphelion/strategy.h"
 #include "aphelion/data_ingest.h"
+#include "aphelion/replay_engine.h"
+#include "aphelion/features.h"
+#include "aphelion/regime.h"
+#include "aphelion/risk_manager.h"
 #include <vector>
 #include <memory>
 #include <string>
@@ -32,6 +39,12 @@ struct LeaderboardRow {
     int      trade_count;
     bool     liquidated;
     const char* strategy_name;
+    int      fast_period;
+    int      slow_period;
+    // V3: Composite quality metrics
+    double   composite_score;     // weighted quality metric
+    double   risk_adjusted_return; // return / max_drawdown
+    double   consistency_score;    // 0-1: how stable the equity curve
 };
 
 struct TournamentConfig {
@@ -43,35 +56,43 @@ struct TournamentConfig {
     double       commission       = 0.0;
     double       slippage         = 0.0;
     int          max_positions    = 1;
-    // Strategy parameter ranges for variation
+    RunMode      mode             = RunMode::FULL;
+    int          strategy_id      = 0;  // V3: 0=SMA, 1=ContextSMA
+    // Strategy parameter ranges
     int          fast_period_min  = 5;
     int          fast_period_max  = 50;
     int          slow_period_min  = 20;
     int          slow_period_max  = 200;
+    // V3: Feature/regime/risk configs
+    FeatureConfig feature_config;
+    RegimeConfig  regime_config;
+    RiskConfig    risk_config;
 };
 
 class Tournament {
 public:
     Tournament(const TournamentConfig& config, const BarTape& tape);
 
-    // Initialize all accounts with varied parameters.
     void initialize();
-
-    // Run the full replay.
     void run();
-
-    // Compute leaderboard after replay.
     std::vector<LeaderboardRow> leaderboard() const;
 
-    // Access entries for reporting.
     const std::vector<TournamentEntry>& entries() const { return entries_; }
     const BarTape& tape() const { return tape_; }
     const TournamentConfig& config() const { return config_; }
+    const ReplayStats& last_stats() const { return last_stats_; }
+    const FeatureTape& feature_tape() const { return feature_tape_; }
 
 private:
     TournamentConfig             config_;
     const BarTape&               tape_;
     std::vector<TournamentEntry> entries_;
+    ReplayStats                  last_stats_;
+    FeatureTape                  feature_tape_;
+
+    // V3: Compute composite quality score for ranking
+    static double compute_composite_score(const LeaderboardRow& row);
+    static double compute_consistency(const Account& account, size_t tape_size);
 };
 
 } // namespace aphelion

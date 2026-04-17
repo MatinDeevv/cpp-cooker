@@ -22,8 +22,19 @@ struct Account {
 
     void init(uint32_t id, const SimulationParams& params);
 
+    // ── FUSED HOT PATH ──────────────────────────────────────
+    // Single pass over positions: mark-to-market + SL/TP + stop-out.
+    // Replaces the old mark_to_market() + check_sl_tp() + enforce_stop_out()
+    // sequence which required 2-3 separate position loops.
+    // This is THE performance-critical function.
+    PerBarResult update_per_bar(
+        double bid, double ask,
+        const Bar* bar, size_t bar_index,
+        double stop_out_level
+    );
+
     // Mark-to-market all open positions, update equity/margin/drawdown.
-    // This is the HOT path — called once per bar per account.
+    // Kept for backward compat and cold-path use (e.g., final MTM).
     void mark_to_market(const MarketState& market);
 
     // Check and execute stop-loss / take-profit exits.

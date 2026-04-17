@@ -1,0 +1,62 @@
+================================================================
+ APHELION RESEARCH — Simulation Engine v3.0.0
+================================================================
+ Symbol:       XAUUSD
+ Timeframe:    H1
+ Accounts:     50
+ Max leverage: 500
+ Risk/trade:   0.01
+ Stop-out:     50%
+ Strategy:     SmaCrossover (V2) (id=0)
+ Mode:         BENCHMARK
+ Data root:    C:\Users\marti\LLM\data_sim_ready
+ Output:       output
+================================================================
+
+[phase 1] Initializing calendar...
+
+[phase 2] Loading market data...
+[ingest] Loading 1 parquet files for XAUUSD H1... 93384 bars loaded (7 MB tape)
+[phase 2] Data loaded in 0.0258872 s
+  Primary bars:  93384
+  Tape size:     7 MB
+
+[phase 3] Setting up tournament...
+[tournament] Initialized 50 accounts (strategy=0) with SMA periods [5-50] / [20-200]
+
+[phase 4] Running simulation...
+[tournament] Computing market features...[features] Computed 93384 bar features (7295 KB feature tape)
+ done
+[tournament] Classifying regimes...[regime] Classification complete over 93384 bars:
+  TRENDING_UP: 10618 (11.4%)
+  TRENDING_DOWN: 6516 (7.0%)
+  RANGE_BOUND: 64017 (68.6%)
+  VOLATILE_EXPANSION: 3 (0.0%)
+  COMPRESSION: 181 (0.2%)
+  TRANSITION: 12049 (12.9%)
+[tournament] Preparing strategies... done
+[tournament] Running replay over 93384 bars x 50 accounts...
+[tournament] Replay complete:
+  Bars processed:   93384
+  Accounts:         50
+  Total fills:      61757
+  Total rejects:    15891
+  Total stop-outs:  0
+  Total SL/TP:      46020
+  Total signals:    77648
+  Risk vetoes:      0
+  Skipped (liq):    0
+  Elapsed:          0.0 s
+  Bars/sec:         3140129
+  Acct*Bars/sec:    157006479
+
+================================================================
+ BENCHMARK COMPLETE
+ Replay:           0.0 s
+ Acct*Bars/sec:    157006479
+ Total elapsed:    0.2 s
+ Data load:        0.0 s
+ Signals fired:    77648
+ Fills:            61757
+ SL/TP exits:      46020
+================================================================

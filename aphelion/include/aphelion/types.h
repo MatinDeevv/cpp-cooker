@@ -110,11 +110,84 @@ enum class ActionType : uint8_t {
     CLOSE     = 3
 };
 
+// ── Signal Confidence ───────────────────────────────────────
+// Strategies produce a confidence level with each decision.
+// The risk layer uses this to modulate position sizing.
+enum class Confidence : uint8_t {
+    NONE     = 0,   // no signal / hold
+    LOW      = 1,   // weak conviction — reduced size
+    MEDIUM   = 2,   // standard conviction
+    HIGH     = 3,   // strong conviction — full size
+    EXTREME  = 4    // exceptional setup — allow max aggression
+};
+
+// ── Regime Classification ───────────────────────────────────
+// Precomputed per-bar. Strategies gate on this.
+enum class Regime : uint8_t {
+    UNKNOWN          = 0,
+    TRENDING_UP      = 1,
+    TRENDING_DOWN    = 2,
+    RANGE_BOUND      = 3,   // chop / mean-reverting
+    VOLATILE_EXPANSION = 4, // breakout / high vol
+    COMPRESSION      = 5,   // tight range / squeeze
+    TRANSITION       = 6    // regime change in progress
+};
+
+// ── Precomputed Market Features (per bar) ───────────────────
+// Flat struct, precomputed once before replay.
+// Strategies and risk layer READ from this; never write.
+// 128 bytes — fits 2 cache lines, co-located with bar data.
+struct alignas(16) BarFeatures {
+    // Trend
+    float  trend_slope_short;     // normalized slope of short lookback
+    float  trend_slope_medium;    // normalized slope of medium lookback
+    float  trend_slope_long;      // normalized slope of long lookback
+    float  trend_alignment;       // -1.0 to 1.0: agreement across horizons
+
+    // Momentum
+    float  momentum_short;        // returns over short window
+    float  momentum_medium;       // returns over medium window
+    float  momentum_acceleration; // change in momentum (2nd derivative)
+
+    // Volatility
+    float  volatility_raw;        // rolling realized volatility
+    float  volatility_percentile; // 0.0-1.0 rank vs lookback history
+    float  volatility_ratio;      // short vol / long vol (expansion/contraction)
+
+    // Structure
+    float  distance_to_high;      // (close - recent_high) / recent_range, negative = below
+    float  distance_to_low;       // (close - recent_low) / recent_range, positive = above
+    float  bar_range_zscore;      // current bar range vs rolling average
+    float  compression_score;     // 0.0-1.0: how compressed recent price action is
+
+    // Friction / session
+    float  spread_percentile;     // 0.0-1.0 rank vs recent history
+    uint8_t gap_flag;             // copied from Bar.flags
+    uint8_t regime;               // Regime enum value
+    uint8_t regime_persistence;   // bars since last regime change
+    uint8_t _pad[1];              // alignment
+
+    // Higher timeframe context (filled if multi-TF active)
+    float  htf_trend_alignment;   // primary vs higher TF trend agreement
+    float  htf_bias;              // -1.0 (bearish) to 1.0 (bullish) from HTF
+    float  htf_volatility_ratio;  // primary vol / HTF vol
+    float  _reserved[1];          // future use
+};
+
+// BarFeatures: 15 floats (60B) + 4 uint8_t (4B) + 4 floats (16B) = 80B
+static_assert(sizeof(BarFeatures) <= 96, "BarFeatures must stay compact");
+
+// ── Precomputed Feature Tape ────────────────────────────────
+// One BarFeatures per bar, computed before replay starts.
+// The replay engine passes a pointer to strategies — zero cost.
+
 struct StrategyDecision {
     ActionType action       = ActionType::HOLD;
+    Confidence confidence   = Confidence::NONE;
     double     stop_loss    = 0.0;   // price
     double     take_profit  = 0.0;   // price
-    double     risk_fraction= 0.01;  // fraction of equity to risk
+    double     risk_fraction= 0.01;  // fraction of equity to risk (base)
+    Regime     preferred_regime = Regime::UNKNOWN; // regime this signal prefers
 };
 
 // ── Account Hot State: 128 bytes (2 cache lines) ────────────
@@ -178,6 +251,26 @@ struct SimulationParams {
     // Strategy-specific params
     int    fast_period        = 10;
     int    slow_period        = 50;
+};
+
+// ── Run Mode ────────────────────────────────────────────────
+enum class RunMode : uint8_t {
+    FULL      = 0,  // Full reporting, equity curves, trade logs
+    BENCHMARK = 1,  // Minimal output, maximum replay speed measurement
+    RESEARCH  = 2   // Full data collection, no console spam
+};
+
+// ── Precomputed Signal (for devirtualized strategy fast path) ─
+enum class Signal : uint8_t {
+    NONE           = 0,
+    BULLISH_CROSS  = 1,
+    BEARISH_CROSS  = 2
+};
+
+// ── Per-bar fused update result ─────────────────────────────
+struct PerBarResult {
+    int  positions_closed = 0;
+    bool stopped_out      = false;
 };
 
 // ── Constants ───────────────────────────────────────────────

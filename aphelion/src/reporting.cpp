@@ -210,32 +210,42 @@ void write_all_outputs(
     }
 
     // Print leaderboard summary to console
-    std::cout << "\n==================== LEADERBOARD (top 20) ====================\n";
+    std::cout << "\n==================== LEADERBOARD (top 20) — ranked by composite quality ====================\n";
     std::cout << std::left
-              << std::setw(6)  << "Rank"
-              << std::setw(8)  << "AcctID"
-              << std::setw(14) << "Equity"
-              << std::setw(12) << "Return%"
-              << std::setw(12) << "MaxDD%"
-              << std::setw(10) << "WinRate"
-              << std::setw(10) << "PF"
-              << std::setw(10) << "Trades"
-              << std::setw(10) << "Liq"
+              << std::setw(5)  << "Rank"
+              << std::setw(6)  << "Acct"
+              << std::setw(12) << "Equity"
+              << std::setw(10) << "Ret%"
+              << std::setw(9)  << "MaxDD%"
+              << std::setw(8)  << "WR%"
+              << std::setw(8)  << "PF"
+              << std::setw(7)  << "Trd"
+              << std::setw(8)  << "RiskAdj"
+              << std::setw(7)  << "Cons"
+              << std::setw(9)  << "Composite"
+              << std::setw(6)  << "F"
+              << std::setw(6)  << "S"
+              << std::setw(5)  << "Liq"
               << "\n";
 
     size_t show = std::min(lb.size(), static_cast<size_t>(20));
     for (size_t i = 0; i < show; ++i) {
         const auto& r = lb[i];
         std::cout << std::left
-                  << std::setw(6)  << (i + 1)
-                  << std::setw(8)  << r.account_id
-                  << std::setw(14) << std::fixed << std::setprecision(2) << r.final_equity
-                  << std::setw(12) << std::fixed << std::setprecision(2) << r.total_return
-                  << std::setw(12) << std::fixed << std::setprecision(2) << r.max_drawdown
-                  << std::setw(10) << std::fixed << std::setprecision(1) << r.win_rate
-                  << std::setw(10) << std::fixed << std::setprecision(2) << r.profit_factor
-                  << std::setw(10) << r.trade_count
-                  << std::setw(10) << (r.liquidated ? "YES" : "no")
+                  << std::setw(5)  << (i + 1)
+                  << std::setw(6)  << r.account_id
+                  << std::setw(12) << std::fixed << std::setprecision(1) << r.final_equity
+                  << std::setw(10) << std::fixed << std::setprecision(2) << r.total_return
+                  << std::setw(9)  << std::fixed << std::setprecision(1) << r.max_drawdown
+                  << std::setw(8)  << std::fixed << std::setprecision(1) << r.win_rate
+                  << std::setw(8)  << std::fixed << std::setprecision(2) << r.profit_factor
+                  << std::setw(7)  << r.trade_count
+                  << std::setw(8)  << std::fixed << std::setprecision(2) << r.risk_adjusted_return
+                  << std::setw(7)  << std::fixed << std::setprecision(2) << r.consistency_score
+                  << std::setw(9)  << std::fixed << std::setprecision(2) << r.composite_score
+                  << std::setw(6)  << r.fast_period
+                  << std::setw(6)  << r.slow_period
+                  << std::setw(5)  << (r.liquidated ? "YES" : "no")
                   << "\n";
     }
     std::cout << "================================================================\n\n";
