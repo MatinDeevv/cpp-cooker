@@ -44,6 +44,31 @@ void write_summary_csv(
     const std::vector<LeaderboardRow>& leaderboard
 );
 
+void write_validation_summary_csv(
+    const std::filesystem::path& output_dir,
+    const ValidationSummary& summary
+);
+
+void write_validation_walkforward_csv(
+    const std::filesystem::path& output_dir,
+    const ValidationSummary& summary
+);
+
+void write_validation_regime_csv(
+    const std::filesystem::path& output_dir,
+    const ValidationSummary& summary
+);
+
+void write_validation_stress_csv(
+    const std::filesystem::path& output_dir,
+    const ValidationSummary& summary
+);
+
+void write_validation_conditions_csv(
+    const std::filesystem::path& output_dir,
+    const ValidationSummary& summary
+);
+
 void write_trade_log(
     const std::filesystem::path& output_dir,
     uint32_t account_id,

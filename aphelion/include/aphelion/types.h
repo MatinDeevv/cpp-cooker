@@ -273,6 +273,7 @@ struct SimulationParams {
     double session_drawdown_kill   = 0.03;
     double session_loss_kill       = 0.02;
     int    session_trade_limit     = 48;
+    uint32_t trade_start_bar       = 0;
     uint8_t enable_ech             = 1;
     uint8_t live_safe_mode         = 1;
     uint8_t emergency_flatten      = 0;

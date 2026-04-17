@@ -5,6 +5,7 @@
 
 #include "aphelion/reporting.h"
 
+#include <algorithm>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
@@ -44,6 +45,43 @@ static std::string direction_str(Direction d) {
     return d == Direction::LONG ? "LONG" : "SHORT";
 }
 
+static std::string regime_str(Regime regime) {
+    switch (regime) {
+        case Regime::TRENDING_UP: return "TRENDING_UP";
+        case Regime::TRENDING_DOWN: return "TRENDING_DOWN";
+        case Regime::RANGE_BOUND: return "RANGE_BOUND";
+        case Regime::VOLATILE_EXPANSION: return "VOLATILE_EXPANSION";
+        case Regime::COMPRESSION: return "COMPRESSION";
+        case Regime::TRANSITION: return "TRANSITION";
+        case Regime::UNKNOWN:
+        default: return "UNKNOWN";
+    }
+}
+
+static std::string csv_escape(const std::string& value) {
+    if (value.find_first_of(",\"\n") == std::string::npos) {
+        return value;
+    }
+    std::string escaped;
+    escaped.reserve(value.size() + 4);
+    escaped.push_back('"');
+    for (char c : value) {
+        if (c == '"') escaped.push_back('"');
+        escaped.push_back(c);
+    }
+    escaped.push_back('"');
+    return escaped;
+}
+
+static std::string join_strings(const std::vector<std::string>& values) {
+    std::ostringstream out;
+    for (size_t i = 0; i < values.size(); ++i) {
+        if (i > 0) out << " | ";
+        out << values[i];
+    }
+    return out.str();
+}
+
 void write_summary_csv(
     const std::filesystem::path& output_dir,
     const std::vector<LeaderboardRow>& leaderboard
@@ -57,7 +95,9 @@ void write_summary_csv(
 
     f << "account_id,final_balance,final_equity,total_return,max_drawdown,"
          "win_rate,profit_factor,expectancy,trade_count,liquidated,strategy,"
-         "risk_adjusted_return,consistency_score,composite_score\n";
+         "risk_adjusted_return,consistency_score,composite_score,"
+         "validation_passed,heavy_validation_run,robust_score,stability_score,"
+         "monte_carlo_resilience,regime_consistency,overfit_penalty,rejection_reason\n";
 
     f << std::fixed << std::setprecision(2);
     for (const auto& r : leaderboard) {
@@ -74,10 +114,182 @@ void write_summary_csv(
           << r.strategy_name << ","
           << r.risk_adjusted_return << ","
           << r.consistency_score << ","
-          << r.composite_score << "\n";
+          << r.composite_score << ","
+          << (r.validation_passed ? "true" : "false") << ","
+          << (r.heavy_validation_run ? "true" : "false") << ","
+          << r.robust_score << ","
+          << r.stability_score << ","
+          << r.monte_carlo_resilience << ","
+          << r.regime_consistency << ","
+          << r.overfit_penalty << ","
+          << csv_escape(r.rejection_reason) << "\n";
     }
 
     std::cout << "[report] Wrote " << path << " (" << leaderboard.size() << " rows)" << std::endl;
+}
+
+void write_validation_summary_csv(
+    const std::filesystem::path& output_dir,
+    const ValidationSummary& summary
+) {
+    auto path = output_dir / "validation_summary.csv";
+    std::ofstream f(path);
+    if (!f) return;
+
+    f << "account_id,strategy,fast_period,slow_period,quick_filter_passed,"
+         "heavy_validation_run,validation_passed,base_return_pct,base_max_drawdown_pct,"
+         "base_profit_factor,base_expectancy,base_trade_count,holdout_validation_return_pct,"
+         "holdout_test_return_pct,robust_score,return_quality,drawdown_score,stability_score,"
+         "robustness_component,regime_consistency,monte_carlo_resilience,timeframe_consistency,"
+         "parameter_sensitivity,overfit_penalty,degradation_slope,rejection_reasons,failure_modes\n";
+
+    f << std::fixed << std::setprecision(4);
+    for (const auto& report : summary.reports) {
+        f << report.account_id << ","
+          << csv_escape(report.strategy_name) << ","
+          << report.fast_period << ","
+          << report.slow_period << ","
+          << (report.quick_filter_passed ? "true" : "false") << ","
+          << (report.heavy_validation_run ? "true" : "false") << ","
+          << (report.passed ? "true" : "false") << ","
+          << report.base_metrics.total_return_pct << ","
+          << report.base_metrics.max_drawdown_pct << ","
+          << report.base_metrics.profit_factor << ","
+          << report.base_metrics.expectancy << ","
+          << report.base_metrics.trade_count << ","
+          << report.holdout.validation.total_return_pct << ","
+          << report.holdout.test.total_return_pct << ","
+          << report.robust_score << ","
+          << report.return_quality << ","
+          << report.drawdown_score << ","
+          << report.stability_score << ","
+          << report.robustness_component << ","
+          << report.regime_consistency << ","
+          << report.monte_carlo_resilience << ","
+          << report.timeframe_consistency << ","
+          << report.parameter_sensitivity << ","
+          << report.overfit_penalty << ","
+          << report.degradation_slope << ","
+          << csv_escape(join_strings(report.rejection_reasons)) << ","
+          << csv_escape(join_strings(report.failure_modes)) << "\n";
+    }
+}
+
+void write_validation_walkforward_csv(
+    const std::filesystem::path& output_dir,
+    const ValidationSummary& summary
+) {
+    auto path = output_dir / "validation_walkforward.csv";
+    std::ofstream f(path);
+    if (!f) return;
+
+    f << "account_id,window_index,train_begin,train_end,test_begin,test_end,"
+         "train_return_pct,test_return_pct,train_max_drawdown_pct,test_max_drawdown_pct,"
+         "generalization_ratio\n";
+
+    f << std::fixed << std::setprecision(4);
+    for (const auto& report : summary.reports) {
+        for (const auto& window : report.walkforward) {
+            f << report.account_id << ","
+              << window.index << ","
+              << window.train_begin << ","
+              << window.train_end << ","
+              << window.test_begin << ","
+              << window.test_end << ","
+              << window.train.total_return_pct << ","
+              << window.test.total_return_pct << ","
+              << window.train.max_drawdown_pct << ","
+              << window.test.max_drawdown_pct << ","
+              << window.generalization_ratio << "\n";
+        }
+    }
+}
+
+void write_validation_regime_csv(
+    const std::filesystem::path& output_dir,
+    const ValidationSummary& summary
+) {
+    auto path = output_dir / "validation_regimes.csv";
+    std::ofstream f(path);
+    if (!f) return;
+
+    f << "account_id,regime,trades,bar_share,profit_share,net_pnl,expectancy,"
+         "win_rate_pct,profit_factor,failing\n";
+
+    f << std::fixed << std::setprecision(4);
+    for (const auto& report : summary.reports) {
+        for (const auto& regime : report.regime_breakdown) {
+            f << report.account_id << ","
+              << regime_str(regime.regime) << ","
+              << regime.trades << ","
+              << regime.bar_share << ","
+              << regime.profit_share << ","
+              << regime.net_pnl << ","
+              << regime.expectancy << ","
+              << regime.win_rate_pct << ","
+              << regime.profit_factor << ","
+              << (regime.failing ? "true" : "false") << "\n";
+        }
+    }
+}
+
+void write_validation_stress_csv(
+    const std::filesystem::path& output_dir,
+    const ValidationSummary& summary
+) {
+    auto path = output_dir / "validation_stress.csv";
+    std::ofstream f(path);
+    if (!f) return;
+
+    f << "account_id,category,name,total_return_pct,max_drawdown_pct,profit_factor,"
+         "expectancy,trade_count,passed\n";
+
+    f << std::fixed << std::setprecision(4);
+    for (const auto& report : summary.reports) {
+        for (const auto& stress : report.stress_tests) {
+            f << report.account_id << ",stress,"
+              << csv_escape(stress.name) << ","
+              << stress.metrics.total_return_pct << ","
+              << stress.metrics.max_drawdown_pct << ","
+              << stress.metrics.profit_factor << ","
+              << stress.metrics.expectancy << ","
+              << stress.metrics.trade_count << ","
+              << (stress.passed ? "true" : "false") << "\n";
+        }
+        for (const auto& test : report.timeframe_tests) {
+            f << report.account_id << ",timeframe,"
+              << csv_escape(test.name) << ","
+              << test.metrics.total_return_pct << ","
+              << test.metrics.max_drawdown_pct << ","
+              << test.metrics.profit_factor << ","
+              << test.metrics.expectancy << ","
+              << test.metrics.trade_count << ","
+              << (test.passed ? "true" : "false") << "\n";
+        }
+    }
+}
+
+void write_validation_conditions_csv(
+    const std::filesystem::path& output_dir,
+    const ValidationSummary& summary
+) {
+    auto path = output_dir / "validation_conditions.csv";
+    std::ofstream f(path);
+    if (!f) return;
+
+    f << "account_id,condition,trades,net_pnl,expectancy,win_rate_pct\n";
+    f << std::fixed << std::setprecision(4);
+
+    for (const auto& report : summary.reports) {
+        for (const auto& condition : report.condition_breakdown) {
+            f << report.account_id << ","
+              << csv_escape(condition.name) << ","
+              << condition.trades << ","
+              << condition.net_pnl << ","
+              << condition.expectancy << ","
+              << condition.win_rate_pct << "\n";
+        }
+    }
 }
 
 void write_trade_log(
@@ -182,6 +394,13 @@ void write_all_outputs(
 
     // Summary
     write_summary_csv(output_dir, lb);
+    if (!tournament.validation_summary().reports.empty()) {
+        write_validation_summary_csv(output_dir, tournament.validation_summary());
+        write_validation_walkforward_csv(output_dir, tournament.validation_summary());
+        write_validation_regime_csv(output_dir, tournament.validation_summary());
+        write_validation_stress_csv(output_dir, tournament.validation_summary());
+        write_validation_conditions_csv(output_dir, tournament.validation_summary());
+    }
 
     // Metadata
     write_run_metadata(output_dir, meta);

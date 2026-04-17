@@ -14,6 +14,7 @@
 #include "aphelion/replay_engine.h"
 #include "aphelion/intelligence.h"
 #include "aphelion/risk_manager.h"
+#include "aphelion/validation_engine.h"
 #include <vector>
 #include <memory>
 #include <string>
@@ -44,6 +45,14 @@ struct LeaderboardRow {
     double   composite_score;     // weighted quality metric
     double   risk_adjusted_return; // return / max_drawdown
     double   consistency_score;    // 0-1: how stable the equity curve
+    double   robust_score = 0.0;
+    double   stability_score = 0.0;
+    double   monte_carlo_resilience = 0.0;
+    double   regime_consistency = 0.0;
+    double   overfit_penalty = 0.0;
+    bool     validation_passed = false;
+    bool     heavy_validation_run = false;
+    std::string rejection_reason;
 };
 
 struct TournamentConfig {
@@ -76,7 +85,9 @@ struct TournamentConfig {
     RegimeConfig  regime_config;
     EchConfig     ech_config;
     RiskConfig    risk_config;
+    ValidationConfig validation_config;
     std::vector<MultiTimeframeInput> context_inputs;
+    std::vector<const BarTape*> validation_tapes;
 };
 
 class Tournament {
@@ -92,6 +103,7 @@ public:
     const TournamentConfig& config() const { return config_; }
     const ReplayStats& last_stats() const { return last_stats_; }
     const IntelligenceTape& intelligence_tape() const { return intelligence_tape_; }
+    const ValidationSummary& validation_summary() const { return validation_summary_; }
 
 private:
     TournamentConfig             config_;
@@ -99,6 +111,7 @@ private:
     std::vector<TournamentEntry> entries_;
     ReplayStats                  last_stats_;
     IntelligenceTape             intelligence_tape_;
+    ValidationSummary            validation_summary_;
 
     // V3: Compute composite quality score for ranking
     static double compute_composite_score(const LeaderboardRow& row);

@@ -175,6 +175,11 @@ ReplayStats run_replay_v3(
                 continue;
             }
 
+            if (bar_idx < e.params->trade_start_bar) {
+                if (collect_equity) acct.snapshot_equity();
+                continue;
+            }
+
             const Signal sig = e.strategy->signal_at(bar_idx);
             if (sig != Signal::NONE) {
                 stats.total_signals++;

@@ -157,6 +157,38 @@ void Tournament::run() {
         entry.account.mark_to_market(final_market);
     }
 
+    validation_summary_ = {};
+    if (config_.validation_config.enabled) {
+        std::vector<ValidationCandidate> validation_candidates;
+        validation_candidates.reserve(entries_.size());
+        for (const auto& entry : entries_) {
+            validation_candidates.push_back({
+                entry.account.state.account_id,
+                entry.strategy ? entry.strategy->name() : "unknown",
+                entry.params,
+                &entry.account
+            });
+        }
+
+        ValidationExecutionConfig validation_exec;
+        validation_exec.feature_config = config_.feature_config;
+        validation_exec.regime_config = config_.regime_config;
+        validation_exec.ech_config = config_.ech_config;
+        validation_exec.risk_config = config_.risk_config;
+
+        std::cout << "[tournament] Running robustness validation..." << std::flush;
+        validation_summary_ = run_validation_suite(
+            tape_,
+            config_.validation_tapes,
+            intelligence_tape_,
+            validation_candidates,
+            validation_exec,
+            config_.validation_config
+        );
+        std::cout << " done (" << validation_summary_.passing_account_ids.size()
+                  << " passed)" << std::endl;
+    }
+
     double bars_per_sec = stats.bars_processed / std::max(stats.elapsed_seconds, 0.001);
     double acct_bars_per_sec = (stats.bars_processed * entries_.size()) / std::max(stats.elapsed_seconds, 0.001);
 
@@ -301,12 +333,33 @@ std::vector<LeaderboardRow> Tournament::leaderboard() const {
         row.consistency_score = compute_consistency(entry.account, tape_.bars.size());
         row.composite_score = compute_composite_score(row);
 
+        for (const auto& report : validation_summary_.reports) {
+            if (report.account_id != row.account_id) continue;
+            row.robust_score = report.robust_score;
+            row.stability_score = report.stability_score;
+            row.monte_carlo_resilience = report.monte_carlo_resilience;
+            row.regime_consistency = report.regime_consistency;
+            row.overfit_penalty = report.overfit_penalty;
+            row.validation_passed = report.passed;
+            row.heavy_validation_run = report.heavy_validation_run;
+            if (!report.rejection_reasons.empty()) {
+                row.rejection_reason = report.rejection_reasons.front();
+            }
+            break;
+        }
+
         rows.push_back(row);
     }
 
-    // V3: Sort by composite score (intelligence-ranked)
+    // Validation gate ranks robust strategies first.
     std::sort(rows.begin(), rows.end(),
         [](const LeaderboardRow& a, const LeaderboardRow& b) {
+            if (a.validation_passed != b.validation_passed) {
+                return a.validation_passed > b.validation_passed;
+            }
+            if (std::fabs(a.robust_score - b.robust_score) > 1e-9) {
+                return a.robust_score > b.robust_score;
+            }
             return a.composite_score > b.composite_score;
         }
     );

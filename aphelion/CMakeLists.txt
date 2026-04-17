@@ -36,6 +36,12 @@ set(ENGINE_SOURCES
     src/regime.cpp
     src/risk_manager.cpp
     src/intelligence.cpp
+    src/indicator_library.cpp
+    src/strategy_genome.cpp
+    src/evolution_engine.cpp
+    src/robustness_validator.cpp
+    src/validation_engine.cpp
+    src/robustness_score.cpp
 )
 
 add_executable(aphelion ${ENGINE_SOURCES})

@@ -20,6 +20,7 @@
 #include "aphelion/reporting.h"
 #include "aphelion/replay_engine.h"
 #include "aphelion/multi_timeframe.h"
+#include "aphelion/evolution_engine.h"
 
 #include <chrono>
 #include <cmath>
@@ -32,6 +33,14 @@
 
 namespace fs = std::filesystem;
 
+static std::vector<std::string> default_validation_timeframes(const std::string& primary_timeframe) {
+    if (primary_timeframe == "M5") return {"M15", "H1"};
+    if (primary_timeframe == "M15") return {"M5", "H1"};
+    if (primary_timeframe == "H1") return {"M15", "H4"};
+    if (primary_timeframe == "H4") return {"H1", "D1"};
+    return {};
+}
+
 static void print_usage() {
     std::cout << R"(
 Aphelion Research — Simulation Engine v3.0.0 (Intelligence Evolution)
@@ -43,6 +52,7 @@ Options:
   --symbol <sym>           Symbol to replay (default: XAUUSD)
   --timeframe <tf>         Primary replay timeframe (default: H1)
   --context-tf <tf>        Add secondary context timeframe (repeatable)
+  --validation-tf <tf>     Add validation transfer timeframe (repeatable)
   --accounts <n>           Number of simulation accounts (default: 100)
   --leverage <x>           Max leverage (default: 500)
   --risk <pct>             Risk per trade as decimal (default: 0.01)
@@ -55,6 +65,7 @@ Options:
   --slow-max <n>           Slow SMA period max (default: 200)
   --strategy <id>          Strategy: 0=SmaCrossover 1=ContextAwareSma (default: 1)
   --disable-ech            Disable ECH and run legacy intelligence behavior
+  --disable-validation     Disable robustness validation gate
   --disable-live-safe      Disable conservative live safety caps and session rails
   --emergency-flat         Start with an emergency flatten / no-new-risk kill switch
   --live-risk-scale <x>    Risk scale applied in live-safe mode (default: 0.50)
@@ -76,6 +87,22 @@ Run Modes:
   full       Full reporting: equity curves, trade logs, leaderboard
   bench      Benchmark: replay only, no equity curve collection
   research   Full data collection, minimal console output
+
+Evolution Mode (--evolve):
+  --evolve                  Run evolutionary strategy discovery instead of tournament
+  --pop-size <n>            Population size (default: 500)
+  --generations <n>         Number of generations (default: 100)
+  --elite-count <n>         Elite count (default: 20)
+  --mutation-rate <f>       Mutation rate 0.0-1.0 (default: 0.15)
+  --crossover-rate <f>      Crossover rate 0.0-1.0 (default: 0.60)
+  --min-monthly-return <f>  Monthly return threshold as decimal (default: 0.20)
+  --max-drawdown <f>        Max drawdown limit as decimal (default: 0.30)
+  --min-profit-factor <f>   Minimum profit factor (default: 1.3)
+  --min-trades <n>          Minimum trade count (default: 20)
+  --batch-size <n>          Candidates per batch evaluation (default: 50)
+  --evolution-output <dir>  Evolution output directory (default: evolution_output)
+  --evolution-seed <n>      Random seed for reproducibility (default: 42)
+  --no-robustness           Skip robustness validation phase
 )";
 }
 
@@ -85,6 +112,7 @@ int main(int argc, char* argv[]) {
     std::string symbol      = "XAUUSD";
     std::string timeframe   = "H1";
     std::vector<std::string> context_timeframes;  // V2: secondary TFs
+    std::vector<std::string> validation_timeframes;
     int    num_accounts     = 100;
     double max_leverage     = 500.0;
     double risk_per_trade   = 0.01;
@@ -97,6 +125,7 @@ int main(int argc, char* argv[]) {
     int    slow_max         = 200;
     int    strategy_id      = 1;  // V3: default to ContextAwareSma
     bool   enable_ech       = true;
+    bool   enable_validation = true;
     bool   live_safe_mode   = true;
     bool   emergency_flatten = false;
     double live_risk_scale  = 0.50;
@@ -108,6 +137,22 @@ int main(int argc, char* argv[]) {
     double session_loss_kill     = 0.02;
     std::string output_dir  = "output";
     aphelion::RunMode run_mode = aphelion::RunMode::FULL;
+
+    // Evolution mode
+    bool   evolve_mode      = false;
+    int    pop_size          = 500;
+    int    evo_generations   = 100;
+    int    elite_count       = 20;
+    float  mutation_rate     = 0.15f;
+    float  crossover_rate    = 0.60f;
+    double min_monthly_return = 0.20;
+    double max_drawdown_limit = 0.30;
+    double min_profit_factor = 1.3;
+    int    min_trades        = 20;
+    int    batch_size_evo    = 50;
+    std::string evo_output   = "evolution_output";
+    uint64_t evo_seed        = 42;
+    bool   skip_robustness   = false;
 
     // ── Parse args ──────────────────────────────────────────
     for (int i = 1; i < argc; ++i) {
@@ -124,6 +169,7 @@ int main(int argc, char* argv[]) {
         else if (arg == "--symbol")     symbol        = next();
         else if (arg == "--timeframe")  timeframe     = next();
         else if (arg == "--context-tf") context_timeframes.push_back(next());
+        else if (arg == "--validation-tf") validation_timeframes.push_back(next());
         else if (arg == "--accounts")   num_accounts  = std::stoi(next());
         else if (arg == "--leverage")   max_leverage  = std::stod(next());
         else if (arg == "--risk")       risk_per_trade= std::stod(next());
@@ -136,6 +182,7 @@ int main(int argc, char* argv[]) {
         else if (arg == "--slow-max")   slow_max      = std::stoi(next());
         else if (arg == "--strategy")   strategy_id   = std::stoi(next());
         else if (arg == "--disable-ech") enable_ech   = false;
+        else if (arg == "--disable-validation") enable_validation = false;
         else if (arg == "--disable-live-safe") live_safe_mode = false;
         else if (arg == "--emergency-flat") emergency_flatten = true;
         else if (arg == "--live-risk-scale") live_risk_scale = std::stod(next());
@@ -152,11 +199,31 @@ int main(int argc, char* argv[]) {
             else if (m == "research")             run_mode = aphelion::RunMode::RESEARCH;
             else                                  run_mode = aphelion::RunMode::FULL;
         }
+        // Evolution mode args
+        else if (arg == "--evolve")              evolve_mode = true;
+        else if (arg == "--pop-size")            pop_size = std::stoi(next());
+        else if (arg == "--generations")         evo_generations = std::stoi(next());
+        else if (arg == "--elite-count")         elite_count = std::stoi(next());
+        else if (arg == "--mutation-rate")        mutation_rate = std::stof(next());
+        else if (arg == "--crossover-rate")       crossover_rate = std::stof(next());
+        else if (arg == "--min-monthly-return")   min_monthly_return = std::stod(next());
+        else if (arg == "--max-drawdown")         max_drawdown_limit = std::stod(next());
+        else if (arg == "--min-profit-factor")    min_profit_factor = std::stod(next());
+        else if (arg == "--min-trades")           min_trades = std::stoi(next());
+        else if (arg == "--batch-size")           batch_size_evo = std::stoi(next());
+        else if (arg == "--evolution-output")     evo_output = next();
+        else if (arg == "--evolution-seed")       evo_seed = std::stoull(next());
+        else if (arg == "--no-robustness")        skip_robustness = true;
         else {
             std::cerr << "Unknown argument: " << arg << std::endl;
             print_usage();
             return 1;
         }
+    }
+
+    if (run_mode == aphelion::RunMode::BENCHMARK && enable_validation) {
+        std::cout << "[config] Disabling validation in benchmark mode to preserve timing." << std::endl;
+        enable_validation = false;
     }
 
     auto total_start = std::chrono::high_resolution_clock::now();
@@ -177,6 +244,19 @@ int main(int argc, char* argv[]) {
             std::cout << context_timeframes[i];
         }
         std::cout << std::endl;
+    }
+    if (enable_validation) {
+        const auto effective_validation_timeframes = validation_timeframes.empty()
+            ? default_validation_timeframes(timeframe)
+            : validation_timeframes;
+        if (!effective_validation_timeframes.empty()) {
+            std::cout << " Valid TFs:   ";
+            for (size_t i = 0; i < effective_validation_timeframes.size(); ++i) {
+                if (i > 0) std::cout << ", ";
+                std::cout << effective_validation_timeframes[i];
+            }
+            std::cout << std::endl;
+        }
     }
     std::cout << " Accounts:     " << num_accounts << std::endl;
     std::cout << " Max leverage: " << max_leverage << std::endl;
@@ -232,6 +312,52 @@ int main(int argc, char* argv[]) {
         }
     }
 
+    std::vector<std::string> effective_validation_timeframes = enable_validation
+        ? (validation_timeframes.empty()
+            ? default_validation_timeframes(timeframe)
+            : validation_timeframes)
+        : std::vector<std::string>{};
+    effective_validation_timeframes.erase(
+        std::remove_if(
+            effective_validation_timeframes.begin(),
+            effective_validation_timeframes.end(),
+            [&](const std::string& tf) { return tf == timeframe; }
+        ),
+        effective_validation_timeframes.end()
+    );
+    std::sort(effective_validation_timeframes.begin(), effective_validation_timeframes.end());
+    effective_validation_timeframes.erase(
+        std::unique(effective_validation_timeframes.begin(), effective_validation_timeframes.end()),
+        effective_validation_timeframes.end()
+    );
+
+    std::vector<aphelion::BarTape> validation_tapes_storage;
+    validation_tapes_storage.reserve(effective_validation_timeframes.size());
+    std::vector<const aphelion::BarTape*> validation_tape_ptrs;
+    validation_tape_ptrs.reserve(effective_validation_timeframes.size());
+
+    for (const auto& validation_tf : effective_validation_timeframes) {
+        bool reused_context = false;
+        for (size_t i = 0; i < context_timeframes.size(); ++i) {
+            if (context_timeframes[i] == validation_tf && i < context_tapes.size()) {
+                validation_tape_ptrs.push_back(&context_tapes[i]);
+                reused_context = true;
+                break;
+            }
+        }
+        if (reused_context) continue;
+
+        try {
+            validation_tapes_storage.push_back(
+                aphelion::load_bar_tape(fs::path(data_root), symbol, validation_tf)
+            );
+            validation_tape_ptrs.push_back(&validation_tapes_storage.back());
+        } catch (const std::exception& e) {
+            std::cerr << "WARNING: Failed to load validation TF " << validation_tf
+                      << ": " << e.what() << std::endl;
+        }
+    }
+
     auto load_end = std::chrono::high_resolution_clock::now();
     double load_secs = std::chrono::duration<double>(load_end - load_start).count();
     std::cout << "[phase 2] Data loaded in " << load_secs << " s" << std::endl;
@@ -239,6 +365,9 @@ int main(int argc, char* argv[]) {
     std::cout << "  Tape size:     " << (tape.bars.size() * sizeof(aphelion::Bar)) / (1024 * 1024) << " MB" << std::endl;
     if (!context_tapes.empty()) {
         std::cout << "  Context TFs:   " << context_tapes.size() << " loaded" << std::endl;
+    }
+    if (!validation_tape_ptrs.empty()) {
+        std::cout << "  Valid TFs:     " << validation_tape_ptrs.size() << " loaded" << std::endl;
     }
 
     if (tape.bars.empty()) {
@@ -256,6 +385,47 @@ int main(int argc, char* argv[]) {
             weight = std::max(1.0f, std::min(3.0f, 1.0f + std::log2(std::max(1.0f, ratio)) * 0.35f));
         }
         context_inputs.push_back({&context_tapes[i], &alignments[i], weight});
+    }
+
+    // ──────────────────────────────────────────────────────
+    //  EVOLUTION MODE
+    // ──────────────────────────────────────────────────────
+    if (evolve_mode) {
+        std::cout << "\n[evolution] Launching evolutionary strategy discovery..." << std::endl;
+
+        aphelion::EvolutionConfig evo_config;
+        evo_config.population_size   = pop_size;
+        evo_config.generations       = evo_generations;
+        evo_config.elite_count       = elite_count;
+        evo_config.mutation_rate     = mutation_rate;
+        evo_config.crossover_rate    = crossover_rate;
+        evo_config.min_monthly_return = min_monthly_return;
+        evo_config.max_drawdown_limit = max_drawdown_limit;
+        evo_config.min_profit_factor = min_profit_factor;
+        evo_config.min_trade_count   = min_trades;
+        evo_config.eval_batch_size   = batch_size_evo;
+        evo_config.output_dir        = evo_output;
+        evo_config.random_seed       = evo_seed;
+        evo_config.checkpoint_enabled = true;
+        evo_config.enable_robustness_eval = !skip_robustness;
+        evo_config.enable_finalist_extraction = true;
+        evo_config.initial_balance   = 10000.0;
+        evo_config.max_leverage      = max_leverage;
+        evo_config.stop_out_level    = stop_out_level;
+        evo_config.commission        = commission;
+        evo_config.slippage          = slippage;
+
+        aphelion::FeatureConfig feat_cfg;
+        aphelion::RegimeConfig  reg_cfg;
+        aphelion::EchConfig     ech_cfg;
+
+        aphelion::EvolutionEngine engine(
+            evo_config, tape,
+            context_inputs,
+            feat_cfg, reg_cfg, ech_cfg);
+
+        engine.run();
+        return 0;
     }
 
     // ── Phase 3: Tournament setup ───────────────────────────
@@ -289,6 +459,8 @@ int main(int argc, char* argv[]) {
     tcfg.risk_config.enable_ech = enable_ech;
     tcfg.risk_config.live_safe_mode = live_safe_mode;
     tcfg.context_inputs  = context_inputs;
+    tcfg.validation_config.enabled = enable_validation;
+    tcfg.validation_tapes = validation_tape_ptrs;
 
     aphelion::Tournament tournament(tcfg, tape);
     tournament.initialize();
