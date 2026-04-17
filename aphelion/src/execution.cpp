@@ -1,11 +1,12 @@
 // ============================================================
-// Aphelion Research — Execution / Fill Engine (Layer F)
+// Aphelion Research - Execution / Fill Engine (Layer F)
 // The authority boundary: validates, fills, or rejects
 // ============================================================
 
 #include "aphelion/execution.h"
+
+#include <algorithm>
 #include <cmath>
-#include <cstring>
 
 namespace aphelion {
 
@@ -20,11 +21,11 @@ void close_position(
     Position& p = account.positions[pos_idx];
     if (!p.active) return;
 
-    double price_delta = (p.direction == Direction::LONG)
-                         ? (exit_price - p.entry_price)
-                         : (p.entry_price - exit_price);
-    double gross = price_delta * p.quantity * CONTRACT_SIZE;
-    double net   = gross - commission * p.quantity;
+    const double price_delta = (p.direction == Direction::LONG)
+        ? (exit_price - p.entry_price)
+        : (p.entry_price - exit_price);
+    const double gross = price_delta * p.quantity * CONTRACT_SIZE;
+    const double net   = gross - commission * p.quantity;
 
     TradeRecord rec;
     rec.direction     = p.direction;
@@ -38,17 +39,7 @@ void close_position(
     rec.gross_pnl     = gross;
     rec.net_pnl       = net;
     rec.exit_reason   = reason;
-    account.trade_log.push_back(rec);
-
-    account.state.balance += net;
-    account.state.realized_pnl += net;
-    account.state.total_trades++;
-    if (net > 0) { account.state.winning_trades++; account.state.gross_profit += net; }
-    else { account.state.gross_loss += std::fabs(net); }
-
-    account.state.used_margin -= p.used_margin;
-    account.state.open_position_count--;
-
+    account.register_closed_trade(rec, p.used_margin);
     p.active = 0;
 }
 
@@ -66,56 +57,62 @@ FillReport execute_decision(
         return report;
     }
 
-    // ── CLOSE ───────────────────────────────────────────────
     if (decision.action == ActionType::CLOSE) {
         for (int i = 0; i < MAX_POSITIONS_PER_ACCOUNT; ++i) {
             if (!account.positions[i].active) continue;
 
             double exit_price = (account.positions[i].direction == Direction::LONG)
-                                ? market.bid()
-                                : market.ask();
-            // Apply slippage (adverse)
+                ? market.bid()
+                : market.ask();
             if (account.positions[i].direction == Direction::LONG)
                 exit_price -= params.slippage_points * POINT_VALUE;
             else
                 exit_price += params.slippage_points * POINT_VALUE;
 
-            close_position(account, i, exit_price, ExitReason::STRATEGY, market, params.commission_per_lot);
+            close_position(
+                account,
+                i,
+                exit_price,
+                decision.close_reason,
+                market,
+                params.commission_per_lot
+            );
         }
         report.result = FillResult::FILLED;
         return report;
     }
 
-    // ── OPEN LONG / OPEN SHORT ──────────────────────────────
     if (decision.action == ActionType::OPEN_LONG || decision.action == ActionType::OPEN_SHORT) {
-        // Check position limit
+        if (account.session.trading_disabled || account.session.flatten_requested) {
+            report.result = FillResult::REJECTED_MARGIN;
+            return report;
+        }
+
         if (account.state.open_position_count >= params.max_positions) {
             report.result = FillResult::REJECTED_MARGIN;
             return report;
         }
 
-        // Find a free position slot
         int slot = -1;
         for (int i = 0; i < MAX_POSITIONS_PER_ACCOUNT; ++i) {
-            if (!account.positions[i].active) { slot = i; break; }
+            if (!account.positions[i].active) {
+                slot = i;
+                break;
+            }
         }
         if (slot < 0) {
             report.result = FillResult::REJECTED_MARGIN;
             return report;
         }
 
-        Direction dir = (decision.action == ActionType::OPEN_LONG)
-                        ? Direction::LONG : Direction::SHORT;
+        const Direction dir = (decision.action == ActionType::OPEN_LONG)
+            ? Direction::LONG
+            : Direction::SHORT;
 
-        // Determine entry price with spread and slippage
-        double entry_price;
-        if (dir == Direction::LONG) {
-            entry_price = market.ask() + params.slippage_points * POINT_VALUE;
-        } else {
-            entry_price = market.bid() - params.slippage_points * POINT_VALUE;
-        }
+        const double entry_price = (dir == Direction::LONG)
+            ? market.ask() + params.slippage_points * POINT_VALUE
+            : market.bid() - params.slippage_points * POINT_VALUE;
 
-        // Compute stop distance
         double stop_distance = 0.0;
         if (decision.stop_loss > 0.0) {
             stop_distance = std::fabs(entry_price - decision.stop_loss);
@@ -126,24 +123,52 @@ FillReport execute_decision(
             return report;
         }
 
-        // Position sizing
         double lots = compute_position_size(
             account.state, stop_distance, entry_price, decision.risk_fraction
         );
-
         if (lots <= 0.0) {
             report.result = FillResult::REJECTED_SIZE;
             return report;
         }
 
-        // Compute required margin
         double notional = lots * entry_price * CONTRACT_SIZE;
-        double required_margin = notional / account.state.max_leverage;
+        if (params.live_safe_mode != 0 && params.max_position_notional > 0.0) {
+            const double capped_lots = std::floor(
+                (params.max_position_notional / (entry_price * CONTRACT_SIZE)) / LOT_STEP
+            ) * LOT_STEP;
+            if (capped_lots < MIN_LOT) {
+                report.result = FillResult::REJECTED_MARGIN;
+                return report;
+            }
+            lots = std::min(lots, capped_lots);
+            notional = lots * entry_price * CONTRACT_SIZE;
+        }
 
-        // Final margin check
+        if (params.live_safe_mode != 0 && params.max_total_notional > 0.0) {
+            const double available_notional = params.max_total_notional - account.active_notional();
+            if (available_notional <= 0.0) {
+                report.result = FillResult::REJECTED_MARGIN;
+                return report;
+            }
+            const double capped_lots = std::floor(
+                (available_notional / (entry_price * CONTRACT_SIZE)) / LOT_STEP
+            ) * LOT_STEP;
+            if (capped_lots < MIN_LOT) {
+                report.result = FillResult::REJECTED_MARGIN;
+                return report;
+            }
+            lots = std::min(lots, capped_lots);
+            notional = lots * entry_price * CONTRACT_SIZE;
+        }
+
+        if (lots < MIN_LOT) {
+            report.result = FillResult::REJECTED_SIZE;
+            return report;
+        }
+
+        double required_margin = notional / account.state.max_leverage;
         if (required_margin > account.state.free_margin) {
-            // Try to size down to fit
-            double max_affordable_notional = account.state.free_margin * account.state.max_leverage;
+            const double max_affordable_notional = account.state.free_margin * account.state.max_leverage;
             double affordable_lots = max_affordable_notional / (entry_price * CONTRACT_SIZE);
             affordable_lots = std::floor(affordable_lots / LOT_STEP) * LOT_STEP;
 
@@ -157,33 +182,34 @@ FillReport execute_decision(
             required_margin = notional / account.state.max_leverage;
         }
 
-        // Validate notional <= equity * max_leverage
         if (notional > account.state.equity * account.state.max_leverage) {
             report.result = FillResult::REJECTED_MARGIN;
             return report;
         }
 
-        // ── FILL ────────────────────────────────────────────
         Position& pos = account.positions[slot];
-        pos.entry_price   = entry_price;
-        pos.stop_loss     = decision.stop_loss;
-        pos.take_profit   = decision.take_profit;
-        pos.quantity       = lots;
-        pos.used_margin    = required_margin;
+        pos.entry_price = entry_price;
+        pos.stop_loss = decision.stop_loss;
+        pos.take_profit = decision.take_profit;
+        pos.quantity = lots;
+        pos.used_margin = required_margin;
         pos.unrealized_pnl = 0.0;
-        pos.entry_time_ms  = market.current_bar->time_ms;
-        pos.entry_bar_idx  = static_cast<uint32_t>(market.bar_index);
-        pos.direction      = dir;
-        pos.active         = 1;
-        std::memset(pos._pad, 0, sizeof(pos._pad));
+        pos.entry_time_ms = market.current_bar->time_ms;
+        pos.entry_bar_idx = static_cast<uint32_t>(market.bar_index);
+        pos.direction = dir;
+        pos.active = 1;
+        pos.planned_hold_bars = std::max<uint16_t>(decision.expected_hold_bars, 1u);
+        pos.minimum_hold_bars = std::min(pos.planned_hold_bars, std::max<uint16_t>(decision.minimum_hold_bars, 1u));
+        pos.entry_context_pressure = std::clamp(decision.context_pressure, 0.0f, 1.0f);
+        pos.initial_risk_cash = static_cast<float>(stop_distance * lots * CONTRACT_SIZE);
+        pos.exit_urgency_bias = std::clamp(decision.exit_urgency, 0.0f, 1.0f);
 
-        // Apply commission on entry
-        double commission = params.commission_per_lot * lots;
+        const double commission = params.commission_per_lot * lots;
         account.state.balance -= commission;
-
         account.state.used_margin += required_margin;
         account.state.free_margin -= required_margin;
         account.state.open_position_count++;
+        account.session.entry_count++;
 
         report.result        = FillResult::FILLED;
         report.fill_price    = entry_price;
@@ -192,7 +218,7 @@ FillReport execute_decision(
         return report;
     }
 
-    return report; // HOLD
+    return report;
 }
 
 } // namespace aphelion

@@ -66,7 +66,9 @@ enum class ExitReason : uint8_t {
     TAKE_PROFIT = 2,
     STRATEGY    = 3,
     LIQUIDATION = 4,
-    END_OF_DATA = 5
+    END_OF_DATA = 5,
+    ADAPTIVE_EXIT = 6,
+    KILL_SWITCH = 7
 };
 
 // ── Open Position: 96 bytes ─────────────────────────────────
@@ -82,7 +84,11 @@ struct alignas(16) Position {
     uint32_t  entry_bar_idx;    // 4
     Direction direction;        // 1
     uint8_t   active;           // 1  (0=closed, 1=open)
-    uint8_t   _pad[18];        // 18 → total = 80 bytes
+    uint16_t  planned_hold_bars; // 2
+    uint16_t  minimum_hold_bars; // 2
+    float     entry_context_pressure; // 4
+    float     initial_risk_cash; // 4
+    float     exit_urgency_bias; // 4
 };
 
 static_assert(sizeof(Position) == 80, "Position must be exactly 80 bytes");
@@ -188,6 +194,15 @@ struct StrategyDecision {
     double     take_profit  = 0.0;   // price
     double     risk_fraction= 0.01;  // fraction of equity to risk (base)
     Regime     preferred_regime = Regime::UNKNOWN; // regime this signal prefers
+    ExitReason close_reason = ExitReason::STRATEGY;
+    float      size_multiplier = 1.0f;
+    float      stop_width_multiplier = 1.0f;
+    float      take_profit_multiplier = 1.0f;
+    float      entry_aggression = 0.5f;
+    float      exit_urgency = 0.0f;
+    float      context_pressure = 0.0f;
+    uint16_t   expected_hold_bars = 0;
+    uint16_t   minimum_hold_bars = 0;
 };
 
 // ── Account Hot State: 128 bytes (2 cache lines) ────────────
@@ -251,6 +266,17 @@ struct SimulationParams {
     // Strategy-specific params
     int    fast_period        = 10;
     int    slow_period        = 50;
+    double live_reduced_risk_scale = 0.50;
+    double live_max_leverage_cap   = 25.0;
+    double max_position_notional   = 5000.0;
+    double max_total_notional      = 10000.0;
+    double session_drawdown_kill   = 0.03;
+    double session_loss_kill       = 0.02;
+    int    session_trade_limit     = 48;
+    uint8_t enable_ech             = 1;
+    uint8_t live_safe_mode         = 1;
+    uint8_t emergency_flatten      = 0;
+    uint8_t _sim_pad0              = 0;
 };
 
 // ── Run Mode ────────────────────────────────────────────────

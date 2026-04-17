@@ -23,6 +23,14 @@ struct RunMetadata {
     double      stop_out_level;
     int         num_accounts;
     int         strategy_id;
+    bool        enable_ech;
+    bool        live_safe_mode;
+    double      live_max_leverage_cap;
+    double      max_position_notional;
+    double      max_total_notional;
+    int         session_trade_limit;
+    double      session_drawdown_kill;
+    double      session_loss_kill;
     int         fast_period_min;
     int         fast_period_max;
     int         slow_period_min;

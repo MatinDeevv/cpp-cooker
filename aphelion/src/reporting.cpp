@@ -34,6 +34,8 @@ static std::string exit_reason_str(ExitReason r) {
         case ExitReason::STRATEGY:    return "strategy";
         case ExitReason::LIQUIDATION: return "liquidation";
         case ExitReason::END_OF_DATA: return "end_of_data";
+        case ExitReason::ADAPTIVE_EXIT: return "adaptive_exit";
+        case ExitReason::KILL_SWITCH: return "kill_switch";
         default:                      return "none";
     }
 }
@@ -54,7 +56,8 @@ void write_summary_csv(
     }
 
     f << "account_id,final_balance,final_equity,total_return,max_drawdown,"
-         "win_rate,profit_factor,expectancy,trade_count,liquidated,strategy\n";
+         "win_rate,profit_factor,expectancy,trade_count,liquidated,strategy,"
+         "risk_adjusted_return,consistency_score,composite_score\n";
 
     f << std::fixed << std::setprecision(2);
     for (const auto& r : leaderboard) {
@@ -68,7 +71,10 @@ void write_summary_csv(
           << r.expectancy << ","
           << r.trade_count << ","
           << (r.liquidated ? "true" : "false") << ","
-          << r.strategy_name << "\n";
+          << r.strategy_name << ","
+          << r.risk_adjusted_return << ","
+          << r.consistency_score << ","
+          << r.composite_score << "\n";
     }
 
     std::cout << "[report] Wrote " << path << " (" << leaderboard.size() << " rows)" << std::endl;
@@ -142,11 +148,19 @@ void write_run_metadata(
       << "  \"stop_out_level\": " << meta.stop_out_level << ",\n"
       << "  \"num_accounts\": " << meta.num_accounts << ",\n"
       << "  \"strategy_id\": " << meta.strategy_id << ",\n"
+      << "  \"enable_ech\": " << (meta.enable_ech ? "true" : "false") << ",\n"
+      << "  \"live_safe_mode\": " << (meta.live_safe_mode ? "true" : "false") << ",\n"
+      << "  \"live_max_leverage_cap\": " << meta.live_max_leverage_cap << ",\n"
+      << "  \"max_position_notional\": " << meta.max_position_notional << ",\n"
+      << "  \"max_total_notional\": " << meta.max_total_notional << ",\n"
+      << "  \"session_trade_limit\": " << meta.session_trade_limit << ",\n"
+      << "  \"session_drawdown_kill\": " << meta.session_drawdown_kill << ",\n"
+      << "  \"session_loss_kill\": " << meta.session_loss_kill << ",\n"
       << "  \"fast_period_range\": [" << meta.fast_period_min << ", " << meta.fast_period_max << "],\n"
       << "  \"slow_period_range\": [" << meta.slow_period_min << ", " << meta.slow_period_max << "],\n"
       << "  \"total_bars\": " << meta.total_bars << ",\n"
       << "  \"elapsed_seconds\": " << std::fixed << std::setprecision(3) << meta.elapsed_seconds << ",\n"
-      << "  \"engine\": \"Aphelion Research v1.0.0\",\n"
+      << "  \"engine\": \"Aphelion Research v3.0.0\",\n"
       << "  \"physical_reality_note\": \"This is a historical simulation engine. "
          "True nanosecond execution is not claimed. Architecture uses nanosecond-level "
          "engineering discipline for maximum research throughput.\"\n"

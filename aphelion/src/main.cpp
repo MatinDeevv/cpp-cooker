@@ -24,6 +24,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdlib>
+#include <exception>
 #include <filesystem>
 #include <iostream>
 #include <string>
@@ -53,6 +54,16 @@ Options:
   --slow-min <n>           Slow SMA period min (default: 20)
   --slow-max <n>           Slow SMA period max (default: 200)
   --strategy <id>          Strategy: 0=SmaCrossover 1=ContextAwareSma (default: 1)
+  --disable-ech            Disable ECH and run legacy intelligence behavior
+  --disable-live-safe      Disable conservative live safety caps and session rails
+  --emergency-flat         Start with an emergency flatten / no-new-risk kill switch
+  --live-risk-scale <x>    Risk scale applied in live-safe mode (default: 0.50)
+  --live-max-lev <x>       Effective leverage cap in live-safe mode (default: 25)
+  --max-position-notional <v>  Per-position live-safe notional cap (default: 5000)
+  --max-total-notional <v>     Per-account live-safe total notional cap (default: 10000)
+  --session-trade-limit <n>    Session entry cap before halting (default: 48)
+  --session-dd-kill <x>        Session drawdown kill threshold (default: 0.03)
+  --session-loss-kill <x>      Session realized loss kill threshold (default: 0.02)
   --output <path>          Output directory (default: output)
   --mode <full|bench|research>  Run mode (default: full)
   --help                   Show this help
@@ -85,6 +96,16 @@ int main(int argc, char* argv[]) {
     int    slow_min         = 20;
     int    slow_max         = 200;
     int    strategy_id      = 1;  // V3: default to ContextAwareSma
+    bool   enable_ech       = true;
+    bool   live_safe_mode   = true;
+    bool   emergency_flatten = false;
+    double live_risk_scale  = 0.50;
+    double live_max_lev     = 25.0;
+    double max_position_notional = 5000.0;
+    double max_total_notional    = 10000.0;
+    int    session_trade_limit   = 48;
+    double session_dd_kill       = 0.03;
+    double session_loss_kill     = 0.02;
     std::string output_dir  = "output";
     aphelion::RunMode run_mode = aphelion::RunMode::FULL;
 
@@ -114,6 +135,16 @@ int main(int argc, char* argv[]) {
         else if (arg == "--slow-min")   slow_min      = std::stoi(next());
         else if (arg == "--slow-max")   slow_max      = std::stoi(next());
         else if (arg == "--strategy")   strategy_id   = std::stoi(next());
+        else if (arg == "--disable-ech") enable_ech   = false;
+        else if (arg == "--disable-live-safe") live_safe_mode = false;
+        else if (arg == "--emergency-flat") emergency_flatten = true;
+        else if (arg == "--live-risk-scale") live_risk_scale = std::stod(next());
+        else if (arg == "--live-max-lev") live_max_lev = std::stod(next());
+        else if (arg == "--max-position-notional") max_position_notional = std::stod(next());
+        else if (arg == "--max-total-notional") max_total_notional = std::stod(next());
+        else if (arg == "--session-trade-limit") session_trade_limit = std::stoi(next());
+        else if (arg == "--session-dd-kill") session_dd_kill = std::stod(next());
+        else if (arg == "--session-loss-kill") session_loss_kill = std::stod(next());
         else if (arg == "--output")     output_dir    = next();
         else if (arg == "--mode") {
             std::string m = next();
@@ -153,6 +184,19 @@ int main(int argc, char* argv[]) {
     std::cout << " Stop-out:     " << stop_out_level << "%" << std::endl;
     const char* strat_str = (strategy_id == 1) ? "ContextAwareSma (V3)" : "SmaCrossover (V2)";
     std::cout << " Strategy:     " << strat_str << " (id=" << strategy_id << ")" << std::endl;
+    std::cout << " ECH:          " << (enable_ech ? "enabled" : "disabled") << std::endl;
+    std::cout << " Live-safe:    " << (live_safe_mode ? "enabled" : "disabled") << std::endl;
+    if (live_safe_mode) {
+        std::cout << " Live cap:     lev<=" << live_max_lev
+                  << " risk_scale=" << live_risk_scale
+                  << " pos_notional<=" << max_position_notional
+                  << " total_notional<=" << max_total_notional
+                  << std::endl;
+        std::cout << " Session rails: trade_limit=" << session_trade_limit
+                  << " dd_kill=" << session_dd_kill
+                  << " loss_kill=" << session_loss_kill
+                  << std::endl;
+    }
     std::cout << " Mode:         " << mode_str << std::endl;
     std::cout << " Data root:    " << data_root << std::endl;
     std::cout << " Output:       " << output_dir << std::endl;
@@ -232,6 +276,18 @@ int main(int argc, char* argv[]) {
     tcfg.slow_period_min = slow_min;
     tcfg.slow_period_max = slow_max;
     tcfg.strategy_id     = strategy_id;
+    tcfg.live_safe_mode  = live_safe_mode;
+    tcfg.emergency_flatten = emergency_flatten;
+    tcfg.live_reduced_risk_scale = live_risk_scale;
+    tcfg.live_max_leverage_cap = live_max_lev;
+    tcfg.max_position_notional = max_position_notional;
+    tcfg.max_total_notional = max_total_notional;
+    tcfg.session_trade_limit = session_trade_limit;
+    tcfg.session_drawdown_kill = session_dd_kill;
+    tcfg.session_loss_kill = session_loss_kill;
+    tcfg.ech_config.enabled = enable_ech;
+    tcfg.risk_config.enable_ech = enable_ech;
+    tcfg.risk_config.live_safe_mode = live_safe_mode;
     tcfg.context_inputs  = context_inputs;
 
     aphelion::Tournament tournament(tcfg, tape);
@@ -262,6 +318,8 @@ int main(int argc, char* argv[]) {
         std::cout << " Signals fired:    " << rs.total_signals << std::endl;
         std::cout << " Fills:            " << rs.total_fills << std::endl;
         std::cout << " SL/TP exits:      " << rs.total_sl_tp << std::endl;
+        std::cout << " Session kills:    " << rs.total_session_kills << std::endl;
+        std::cout << " Emergency flats:  " << rs.total_emergency_flats << std::endl;
         std::cout << "================================================================" << std::endl;
         return 0;
     }
@@ -278,6 +336,14 @@ int main(int argc, char* argv[]) {
     meta.stop_out_level  = stop_out_level;
     meta.num_accounts    = num_accounts;
     meta.strategy_id     = strategy_id;
+    meta.enable_ech      = enable_ech;
+    meta.live_safe_mode  = live_safe_mode;
+    meta.live_max_leverage_cap = live_max_lev;
+    meta.max_position_notional = max_position_notional;
+    meta.max_total_notional = max_total_notional;
+    meta.session_trade_limit = session_trade_limit;
+    meta.session_drawdown_kill = session_dd_kill;
+    meta.session_loss_kill = session_loss_kill;
     meta.fast_period_min = fast_min;
     meta.fast_period_max = fast_max;
     meta.slow_period_min = slow_min;
@@ -299,6 +365,8 @@ int main(int argc, char* argv[]) {
     std::cout << " Data load:        " << load_secs << " s" << std::endl;
     std::cout << " Acct*Bars/sec:    " << static_cast<int64_t>(rstats.acct_bars_per_sec) << std::endl;
     std::cout << " Signals fired:    " << rstats.total_signals << std::endl;
+    std::cout << " Session kills:    " << rstats.total_session_kills << std::endl;
+    std::cout << " Emergency flats:  " << rstats.total_emergency_flats << std::endl;
     std::cout << "================================================================" << std::endl;
 
     return 0;

@@ -1,14 +1,15 @@
 // ============================================================
-// Aphelion Research — Dynamic Risk Manager
+// Aphelion Research - Dynamic Risk Manager
 //
 // Pure arithmetic risk modulation. No allocations.
-// Takes precomputed features + runtime account state,
+// Takes precomputed intelligence + runtime account state,
 // produces a size multiplier and optional veto.
 // ============================================================
 
 #include "aphelion/risk_manager.h"
-#include <cmath>
+
 #include <algorithm>
+#include <cmath>
 
 namespace aphelion {
 
@@ -18,33 +19,29 @@ AccountRiskContext AccountRiskContext::from_account(
     int recent_trade_count,
     int lookback_trades
 ) {
-    AccountRiskContext ctx;
-
-    // Current drawdown
+    AccountRiskContext ctx{};
     ctx.current_drawdown = static_cast<float>(state.max_drawdown);
 
-    // Compute from recent trades
-    int start = std::max(0, recent_trade_count - lookback_trades);
-    int wins = 0, losses = 0, consecutive_losses = 0;
+    const int start = std::max(0, recent_trade_count - lookback_trades);
+    int wins = 0;
+    int losses = 0;
+    int consecutive_losses = 0;
 
-    // Count backwards from most recent to find loss streak
     for (int i = recent_trade_count - 1; i >= start; --i) {
         if (recent_trades_ptr[i].net_pnl > 0) {
             wins++;
-            break; // streak broken
-        } else {
-            losses++;
-            consecutive_losses++;
+            break;
         }
+        losses++;
+        consecutive_losses++;
     }
 
-    // Also count wins in the rest of the lookback
     for (int i = recent_trade_count - 1 - consecutive_losses; i >= start; --i) {
         if (recent_trades_ptr[i].net_pnl > 0) wins++;
         else losses++;
     }
 
-    int total_recent = wins + losses;
+    const int total_recent = wins + losses;
     ctx.recent_loss_streak = consecutive_losses;
     ctx.recent_trades = total_recent;
     ctx.recent_win_rate = (total_recent > 0)
@@ -54,53 +51,46 @@ AccountRiskContext AccountRiskContext::from_account(
     return ctx;
 }
 
-
 RiskModulation compute_risk_modulation(
     const StrategyDecision& decision,
     const IntelligenceState& intelligence,
     const AccountRiskContext& account_ctx,
     const RiskConfig& config
 ) {
-    RiskModulation mod;
-    mod.size_scale = 1.0f;
+    RiskModulation mod{};
+    mod.size_scale = std::max(0.1f, decision.size_multiplier);
     mod.veto = false;
     mod.effective_regime = intelligence.regime;
 
-    // ── 1. Confidence scaling ───────────────────────────────
     switch (decision.confidence) {
         case Confidence::LOW:     mod.size_scale *= config.confidence_low_scale; break;
         case Confidence::MEDIUM:  mod.size_scale *= config.confidence_medium_scale; break;
         case Confidence::HIGH:    mod.size_scale *= config.confidence_high_scale; break;
         case Confidence::EXTREME: mod.size_scale *= config.confidence_extreme_scale; break;
-        case Confidence::NONE:    mod.size_scale *= config.confidence_medium_scale; break;
+        case Confidence::NONE:    break;
     }
 
-    // ── 2. Drawdown throttling ──────────────────────────────
-    // Linear ramp-down between start and severe thresholds
     if (account_ctx.current_drawdown > config.drawdown_throttle_start) {
-        float dd_range = config.drawdown_throttle_severe - config.drawdown_throttle_start;
-        float dd_progress = (account_ctx.current_drawdown - config.drawdown_throttle_start);
+        const float dd_range = config.drawdown_throttle_severe - config.drawdown_throttle_start;
+        const float dd_progress = account_ctx.current_drawdown - config.drawdown_throttle_start;
 
         if (dd_range > 1e-6f) {
-            float t = std::min(1.0f, dd_progress / dd_range);
-            float dd_scale = 1.0f - t * (1.0f - config.drawdown_min_scale);
+            const float t = std::min(1.0f, dd_progress / dd_range);
+            const float dd_scale = 1.0f - t * (1.0f - config.drawdown_min_scale);
             mod.size_scale *= dd_scale;
         } else {
             mod.size_scale *= config.drawdown_min_scale;
         }
     }
 
-    // ── 3. Volatility modulation ────────────────────────────
     if (intelligence.features.volatility_percentile > config.vol_high_threshold) {
         mod.size_scale *= config.vol_high_scale;
     } else if (intelligence.features.volatility_percentile < config.vol_low_threshold) {
         mod.size_scale *= config.vol_low_scale;
     }
 
-    // ── 4. Regime compatibility ─────────────────────────────
-    Regime current_regime = intelligence.regime;
     if (decision.preferred_regime != Regime::UNKNOWN &&
-        decision.preferred_regime != current_regime) {
+        decision.preferred_regime != intelligence.regime) {
         if (config.reject_on_regime_mismatch) {
             mod.veto = true;
         } else {
@@ -108,32 +98,50 @@ RiskModulation compute_risk_modulation(
         }
     }
 
-    // ── 5. Loss streak throttling ───────────────────────────
     if (account_ctx.recent_loss_streak >= config.loss_streak_threshold) {
         mod.size_scale *= config.loss_streak_scale;
     }
 
-    // ── 6. Shared intelligence validity ────────────────────
     if (intelligence.context_validity < config.context_validity_floor) {
-        mod.veto = true;
-    } else if (intelligence.context_validity < 0.50f) {
+        mod.veto = config.live_safe_mode;
+        mod.size_scale *= 0.35f;
+    } else if (intelligence.context_validity < 0.45f) {
         mod.size_scale *= config.low_validity_scale;
     }
 
-    // ── 7. Regime-specific adjustments ──────────────────────
-    // In transition regimes, reduce aggression
-    if (current_regime == Regime::TRANSITION) {
-        mod.size_scale *= 0.7f;
-    }
-    // In compression, reduce unless strategy specifically wants it
-    if (current_regime == Regime::COMPRESSION &&
-        decision.preferred_regime != Regime::COMPRESSION) {
-        mod.size_scale *= 0.6f;
+    if (config.enable_ech) {
+        float direction_sign = 0.0f;
+        if (decision.action == ActionType::OPEN_LONG) direction_sign = 1.0f;
+        else if (decision.action == ActionType::OPEN_SHORT) direction_sign = -1.0f;
+
+        const float ech_alignment = intelligence.entropy_collapse * direction_sign;
+        const float energy_alignment = intelligence.directional_energy * direction_sign;
+
+        mod.size_scale *= 1.0f + std::max(0.0f, ech_alignment) * config.ech_positive_bonus;
+        mod.size_scale *= 1.0f - std::max(0.0f, -ech_alignment) * config.ech_negative_penalty;
+        mod.size_scale *= 1.0f + std::max(0.0f, intelligence.temporal_stability - 0.5f) * config.stability_bonus;
+        mod.size_scale *= 1.0f + std::max(0.0f, energy_alignment) * config.energy_bonus;
+        mod.size_scale *= 1.0f - intelligence.failure_memory * config.failure_memory_penalty;
+        mod.size_scale *= 0.90f + intelligence.cross_timeframe_coherence * config.cross_timeframe_bonus;
     }
 
-    // Clamp to valid range
-    mod.size_scale = std::max(0.1f, std::min(2.0f, mod.size_scale));
+    if (intelligence.regime == Regime::TRANSITION) {
+        mod.size_scale *= 0.75f;
+    }
+    if (intelligence.regime == Regime::COMPRESSION &&
+        decision.preferred_regime != Regime::COMPRESSION &&
+        decision.preferred_regime != Regime::VOLATILE_EXPANSION) {
+        mod.size_scale *= 0.70f;
+    }
 
+    if (config.live_safe_mode) {
+        mod.size_scale = std::min(mod.size_scale, config.live_safe_size_cap);
+        if (account_ctx.current_drawdown > config.drawdown_throttle_start * 0.5f) {
+            mod.size_scale *= 0.85f;
+        }
+    }
+
+    mod.size_scale = std::clamp(mod.size_scale, config.min_size_scale, config.max_size_scale);
     return mod;
 }
 

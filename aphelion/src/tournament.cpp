@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <exception>
 #include <iostream>
 #include <numeric>
 
@@ -38,6 +39,16 @@ void Tournament::initialize() {
         entry.params.slippage_points    = config_.slippage;
         entry.params.max_positions      = config_.max_positions;
         entry.params.strategy_id        = config_.strategy_id;
+        entry.params.enable_ech         = config_.ech_config.enabled ? 1 : 0;
+        entry.params.live_safe_mode     = config_.live_safe_mode ? 1 : 0;
+        entry.params.live_reduced_risk_scale = config_.live_reduced_risk_scale;
+        entry.params.live_max_leverage_cap   = config_.live_max_leverage_cap;
+        entry.params.max_position_notional   = config_.max_position_notional;
+        entry.params.max_total_notional      = config_.max_total_notional;
+        entry.params.session_trade_limit     = config_.session_trade_limit;
+        entry.params.session_drawdown_kill   = config_.session_drawdown_kill;
+        entry.params.session_loss_kill       = config_.session_loss_kill;
+        entry.params.emergency_flatten       = config_.emergency_flatten ? 1 : 0;
 
         entry.params.fast_period = config_.fast_period_min +
             static_cast<int>(t * fast_range);
@@ -74,13 +85,20 @@ void Tournament::run() {
     size_t tape_size    = tape_.bars.size();
 
     std::cout << "[tournament] Building unified intelligence tape..." << std::flush;
-    intelligence_tape_ = build_intelligence_tape(
-        tape_,
-        config_.context_inputs.empty() ? nullptr : config_.context_inputs.data(),
-        config_.context_inputs.size(),
-        config_.feature_config,
-        config_.regime_config
-    );
+    try {
+        intelligence_tape_ = build_intelligence_tape(
+            tape_,
+            config_.context_inputs.empty() ? nullptr : config_.context_inputs.data(),
+            config_.context_inputs.size(),
+            config_.feature_config,
+            config_.regime_config,
+            config_.ech_config
+        );
+    } catch (const std::exception& e) {
+        intelligence_tape_ = {};
+        std::cerr << "\n[tournament] WARNING: intelligence build failed, falling back to legacy replay path: "
+                  << e.what() << std::endl;
+    }
     std::cout << " done" << std::endl;
 
     // ── Prepare strategies with shared intelligence ─────────
@@ -153,6 +171,8 @@ void Tournament::run() {
                   << "  Total signals:    " << stats.total_signals << std::endl
                   << "  Risk vetoes:      " << stats.total_risk_vetoes << std::endl
                   << "  Intelligence skips:" << stats.total_regime_skips << std::endl
+                  << "  Session kills:    " << stats.total_session_kills << std::endl
+                  << "  Emergency flats:  " << stats.total_emergency_flats << std::endl
                   << "  Skipped (liq):    " << stats.total_skipped_liq << std::endl
                   << "  Elapsed:          " << stats.elapsed_seconds << " s" << std::endl
                   << "  Bars/sec:         " << static_cast<int64_t>(bars_per_sec) << std::endl

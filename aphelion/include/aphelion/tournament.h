@@ -57,6 +57,15 @@ struct TournamentConfig {
     int          max_positions    = 1;
     RunMode      mode             = RunMode::FULL;
     int          strategy_id      = 0;  // V3: 0=SMA, 1=ContextSMA
+    bool         live_safe_mode   = true;
+    bool         emergency_flatten = false;
+    double       live_reduced_risk_scale = 0.50;
+    double       live_max_leverage_cap   = 25.0;
+    double       max_position_notional   = 5000.0;
+    double       max_total_notional      = 10000.0;
+    int          session_trade_limit     = 48;
+    double       session_drawdown_kill   = 0.03;
+    double       session_loss_kill       = 0.02;
     // Strategy parameter ranges
     int          fast_period_min  = 5;
     int          fast_period_max  = 50;
@@ -65,6 +74,7 @@ struct TournamentConfig {
     // V3: Feature/regime/risk configs
     FeatureConfig feature_config;
     RegimeConfig  regime_config;
+    EchConfig     ech_config;
     RiskConfig    risk_config;
     std::vector<MultiTimeframeInput> context_inputs;
 };

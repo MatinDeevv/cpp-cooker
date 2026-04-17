@@ -37,6 +37,8 @@ struct ReplayStats {
     size_t   total_skipped_liq   = 0;
     size_t   total_risk_vetoes   = 0;  // V3: trades vetoed by risk manager
     size_t   total_regime_skips  = 0;  // V3: signals skipped by intelligence gating
+    size_t   total_session_kills = 0;
+    size_t   total_emergency_flats = 0;
     double   elapsed_seconds     = 0.0;
     double   acct_bars_per_sec   = 0.0;
 };

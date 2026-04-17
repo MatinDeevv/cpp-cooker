@@ -25,6 +25,9 @@ namespace aphelion {
 
 // ── Risk adaptation configuration ───────────────────────────
 struct RiskConfig {
+    bool  enable_ech                = true;
+    bool  live_safe_mode            = true;
+
     // Confidence scaling
     float confidence_low_scale     = 0.5f;   // LOW confidence → 50% size
     float confidence_medium_scale  = 1.0f;   // MEDIUM → 100% (baseline)
@@ -51,8 +54,21 @@ struct RiskConfig {
     float loss_streak_scale        = 0.5f;    // scale after streak
 
     // Unified intelligence gating
-    float context_validity_floor   = 0.25f;   // below this, veto entries
+    float context_validity_floor   = 0.08f;   // only extreme invalidity vetoes
     float low_validity_scale       = 0.65f;   // reduce size in weak contexts
+
+    // ECH deformation
+    float ech_positive_bonus       = 0.25f;
+    float ech_negative_penalty     = 0.35f;
+    float stability_bonus          = 0.20f;
+    float energy_bonus             = 0.18f;
+    float failure_memory_penalty   = 0.40f;
+    float cross_timeframe_bonus    = 0.12f;
+
+    // Live-safe clamps
+    float live_safe_size_cap       = 0.85f;
+    float min_size_scale           = 0.10f;
+    float max_size_scale           = 1.75f;
 };
 
 // ── Account performance context (computed at runtime) ───────
