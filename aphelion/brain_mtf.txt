@@ -1,0 +1,72 @@
+================================================================
+ APHELION RESEARCH — Simulation Engine v3.0.0
+================================================================
+ Symbol:       XAUUSD
+ Timeframe:    H1
+ Context TFs:  H4, D1
+ Accounts:     100
+ Max leverage: 500
+ Risk/trade:   0.01
+ Stop-out:     50%
+ Strategy:     ContextAwareSma (V3) (id=1)
+ Mode:         BENCHMARK
+ Data root:    C:\Users\marti\LLM\data_sim_ready
+ Output:       output
+================================================================
+
+[phase 1] Initializing calendar...
+
+[phase 2] Loading market data...
+[ingest] Loading 1 parquet files for XAUUSD H1... 93384 bars loaded (7 MB tape)
+[ingest] Loading 1 parquet files for XAUUSD H4... 26121 bars loaded (1 MB tape)
+[multi-tf] Aligned H1 -> H4: 93383/93384 primary bars have secondary context
+[ingest] Loading 1 parquet files for XAUUSD D1... 7072 bars loaded (0 MB tape)
+[multi-tf] Aligned H1 -> D1: 93383/93384 primary bars have secondary context
+[phase 2] Data loaded in 0.0310978 s
+  Primary bars:  93384
+  Tape size:     7 MB
+  Context TFs:   2 loaded
+
+[phase 3] Setting up tournament...
+[tournament] Initialized 100 accounts (strategy=1) with SMA periods [5-50] / [20-200]
+
+[phase 4] Running simulation...
+[tournament] Building unified intelligence tape...[features] Computed 93384 bar features (7295 KB feature tape)
+[features] Computed 26121 bar features (2040 KB feature tape)
+[features] Computed 7072 bar features (552 KB feature tape)
+[regime] Classification complete over 93384 bars:
+  TRENDING_UP: 10618 (11.4%)
+  TRENDING_DOWN: 6516 (7.0%)
+  RANGE_BOUND: 64017 (68.6%)
+  VOLATILE_EXPANSION: 3 (0.0%)
+  COMPRESSION: 181 (0.2%)
+  TRANSITION: 12049 (12.9%)
+[intelligence] Unified tape built over 93384 bars using 2 context timeframe(s)
+ done
+[tournament] Preparing strategies... done
+[tournament] Running replay over 93384 bars x 100 accounts...
+[tournament] Replay complete:
+  Bars processed:   93384
+  Accounts:         100
+  Total fills:      94572
+  Total rejects:    33678
+  Total stop-outs:  0
+  Total SL/TP:      75743
+  Total signals:    153047
+  Risk vetoes:      0
+  Intelligence skips:24797
+  Skipped (liq):    0
+  Elapsed:          0.1 s
+  Bars/sec:         1621669
+  Acct*Bars/sec:    162166949
+
+================================================================
+ BENCHMARK COMPLETE
+ Replay:           0.1 s
+ Acct*Bars/sec:    162166949
+ Total elapsed:    0.3 s
+ Data load:        0.0 s
+ Signals fired:    153047
+ Fills:            94572
+ SL/TP exits:      75743
+================================================================

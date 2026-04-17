@@ -35,6 +35,7 @@ set(ENGINE_SOURCES
     src/features.cpp
     src/regime.cpp
     src/risk_manager.cpp
+    src/intelligence.cpp
 )
 
 add_executable(aphelion ${ENGINE_SOURCES})

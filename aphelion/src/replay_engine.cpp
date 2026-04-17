@@ -57,7 +57,7 @@ ReplayStats run_replay_v3(
     size_t tape_size,
     std::vector<ReplayEntry>& entries,
     RunMode mode,
-    const BarFeatures* features,
+    const IntelligenceState* intelligence,
     const RiskConfig& risk_config
 ) {
     ReplayStats stats;
@@ -66,7 +66,7 @@ ReplayStats run_replay_v3(
 
     const size_t num_entries = entries.size();
     const bool collect_equity = (mode != RunMode::BENCHMARK);
-    const bool has_features = (features != nullptr);
+    const bool has_intelligence = (intelligence != nullptr);
 
     // Pre-reserve equity curves to avoid reallocation during replay
     if (collect_equity) {
@@ -134,13 +134,11 @@ ReplayStats run_replay_v3(
                 // ── V3: Context-aware decision path ─────────
                 StrategyDecision decision;
 
-                if (has_features && e.strategy->is_context_aware()) {
-                    // Rich path: features + context
-                    decision = e.strategy->decide_with_context(
-                        market, acct.state, bar_idx, features[bar_idx]
+                if (has_intelligence && e.strategy->is_intelligence_aware()) {
+                    decision = e.strategy->decide_with_intelligence(
+                        market, acct.state, bar_idx, intelligence[bar_idx]
                     );
                 } else {
-                    // V2 path: basic signal-to-decision
                     decision = build_decision_from_signal(
                         sig, bar.close, bar.high, bar.low,
                         acct.state.open_position_count,
@@ -151,7 +149,7 @@ ReplayStats run_replay_v3(
                 // ── V3: Risk modulation ─────────────────────
                 if (decision.action != ActionType::HOLD &&
                     decision.action != ActionType::CLOSE &&
-                    has_features) {
+                    has_intelligence) {
                     // Build lightweight account risk context
                     AccountRiskContext arc;
                     arc.current_drawdown = static_cast<float>(acct.state.max_drawdown);
@@ -175,7 +173,7 @@ ReplayStats run_replay_v3(
                     }
 
                     RiskModulation mod = compute_risk_modulation(
-                        decision, features[bar_idx], arc, risk_config
+                        decision, intelligence[bar_idx], arc, risk_config
                     );
 
                     if (mod.veto) {
@@ -186,6 +184,11 @@ ReplayStats run_replay_v3(
 
                     // Apply size modulation
                     decision.risk_fraction *= static_cast<double>(mod.size_scale);
+                }
+
+                if (decision.action == ActionType::HOLD && sig != Signal::NONE &&
+                    acct.state.open_position_count == 0) {
+                    stats.total_regime_skips++;
                 }
 
                 // Execute

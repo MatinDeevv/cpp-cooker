@@ -22,6 +22,7 @@
 #include "aphelion/multi_timeframe.h"
 
 #include <chrono>
+#include <cmath>
 #include <cstdlib>
 #include <filesystem>
 #include <iostream>
@@ -201,6 +202,18 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
+    std::vector<aphelion::MultiTimeframeInput> context_inputs;
+    context_inputs.reserve(context_tapes.size());
+    for (size_t i = 0; i < context_tapes.size(); ++i) {
+        float weight = 1.0f;
+        if (tape.timeframe_seconds > 0 && context_tapes[i].timeframe_seconds > 0) {
+            float ratio = static_cast<float>(context_tapes[i].timeframe_seconds) /
+                          static_cast<float>(tape.timeframe_seconds);
+            weight = std::max(1.0f, std::min(3.0f, 1.0f + std::log2(std::max(1.0f, ratio)) * 0.35f));
+        }
+        context_inputs.push_back({&context_tapes[i], &alignments[i], weight});
+    }
+
     // ── Phase 3: Tournament setup ───────────────────────────
     std::cout << "\n[phase 3] Setting up tournament..." << std::endl;
 
@@ -219,6 +232,7 @@ int main(int argc, char* argv[]) {
     tcfg.slow_period_min = slow_min;
     tcfg.slow_period_max = slow_max;
     tcfg.strategy_id     = strategy_id;
+    tcfg.context_inputs  = context_inputs;
 
     aphelion::Tournament tournament(tcfg, tape);
     tournament.initialize();

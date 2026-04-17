@@ -73,20 +73,22 @@ void Tournament::run() {
     const Bar* tape_ptr = tape_.bars.data();
     size_t tape_size    = tape_.bars.size();
 
-    // ── V3: Compute features and regime ─────────────────────
-    std::cout << "[tournament] Computing market features..." << std::flush;
-    feature_tape_ = compute_features(tape_, config_.feature_config);
+    std::cout << "[tournament] Building unified intelligence tape..." << std::flush;
+    intelligence_tape_ = build_intelligence_tape(
+        tape_,
+        config_.context_inputs.empty() ? nullptr : config_.context_inputs.data(),
+        config_.context_inputs.size(),
+        config_.feature_config,
+        config_.regime_config
+    );
     std::cout << " done" << std::endl;
 
-    std::cout << "[tournament] Classifying regimes..." << std::flush;
-    classify_regimes(feature_tape_, config_.regime_config);
-
-    // ── Prepare strategies (with features if context-aware) ─
+    // ── Prepare strategies with shared intelligence ─────────
     std::cout << "[tournament] Preparing strategies..." << std::flush;
     for (auto& entry : entries_) {
-        if (entry.strategy->is_context_aware() && !feature_tape_.empty()) {
-            entry.strategy->prepare_with_features(
-                tape_ptr, tape_size, feature_tape_.data()
+        if (entry.strategy->is_intelligence_aware() && !intelligence_tape_.empty()) {
+            entry.strategy->prepare_with_intelligence(
+                tape_ptr, tape_size, intelligence_tape_.data()
             );
         } else {
             entry.strategy->prepare(tape_ptr, tape_size);
@@ -109,10 +111,10 @@ void Tournament::run() {
               << " bars x " << entries_.size() << " accounts..." << std::endl;
 
     // ── V3: Use run_replay_v3 with features and risk config ─
-    const BarFeatures* feat_ptr = feature_tape_.empty() ? nullptr : feature_tape_.data();
+    const IntelligenceState* intelligence_ptr = intelligence_tape_.empty() ? nullptr : intelligence_tape_.data();
     ReplayStats stats = run_replay_v3(
         tape_ptr, tape_size, replay_entries, config_.mode,
-        feat_ptr, config_.risk_config
+        intelligence_ptr, config_.risk_config
     );
 
     last_stats_ = stats;
@@ -150,6 +152,7 @@ void Tournament::run() {
                   << "  Total SL/TP:      " << stats.total_sl_tp << std::endl
                   << "  Total signals:    " << stats.total_signals << std::endl
                   << "  Risk vetoes:      " << stats.total_risk_vetoes << std::endl
+                  << "  Intelligence skips:" << stats.total_regime_skips << std::endl
                   << "  Skipped (liq):    " << stats.total_skipped_liq << std::endl
                   << "  Elapsed:          " << stats.elapsed_seconds << " s" << std::endl
                   << "  Bars/sec:         " << static_cast<int64_t>(bars_per_sec) << std::endl

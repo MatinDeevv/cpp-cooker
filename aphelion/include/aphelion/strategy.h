@@ -13,7 +13,7 @@
 #include "aphelion/types.h"
 #include "aphelion/market_state.h"
 #include "aphelion/account.h"
-#include "aphelion/features.h"
+#include "aphelion/intelligence.h"
 #include <memory>
 #include <vector>
 
@@ -33,11 +33,11 @@ public:
 
     // V3: Context-aware decision with feature access.
     // Default: delegates to basic decide(). Override for intelligence.
-    virtual StrategyDecision decide_with_context(
+    virtual StrategyDecision decide_with_intelligence(
         const MarketState& market,
         const AccountState& account,
         size_t bar_index,
-        const BarFeatures& features
+        const IntelligenceState& intelligence
     ) {
         return decide(market, account, bar_index);
     }
@@ -49,9 +49,9 @@ public:
 
     // V3: Prepare with feature tape access.
     // Default: delegates to prepare(tape, size). Override for feature-aware prep.
-    virtual void prepare_with_features(
+    virtual void prepare_with_intelligence(
         const Bar* tape, size_t tape_size,
-        const BarFeatures* features
+        const IntelligenceState* intelligence
     ) {
         prepare(tape, tape_size);
     }
@@ -62,7 +62,7 @@ public:
     virtual size_t min_signal_bar() const { return 0; }
 
     // V3: Does this strategy produce confidence-aware decisions?
-    virtual bool is_context_aware() const { return false; }
+    virtual bool is_intelligence_aware() const { return false; }
 };
 
 // ── SMA Crossover (baseline V1 strategy, V2 signal-enabled) ─
@@ -116,19 +116,19 @@ public:
         size_t bar_index
     ) override;
 
-    StrategyDecision decide_with_context(
+    StrategyDecision decide_with_intelligence(
         const MarketState& market,
         const AccountState& account,
         size_t bar_index,
-        const BarFeatures& features
+        const IntelligenceState& intelligence
     ) override;
 
     const char* name() const override { return "ContextSMA"; }
 
     void prepare(const Bar* tape, size_t tape_size) override;
-    void prepare_with_features(
+    void prepare_with_intelligence(
         const Bar* tape, size_t tape_size,
-        const BarFeatures* features
+        const IntelligenceState* intelligence
     ) override;
 
     Signal signal_at(size_t bar_index) const override {
@@ -138,7 +138,7 @@ public:
     }
     bool has_signal_tape() const override { return !signal_tape_.empty(); }
     size_t min_signal_bar() const override { return static_cast<size_t>(slow_period_); }
-    bool is_context_aware() const override { return true; }
+    bool is_intelligence_aware() const override { return true; }
 
     int fast_period() const { return fast_period_; }
     int slow_period() const { return slow_period_; }
@@ -147,8 +147,8 @@ private:
     int fast_period_;
     int slow_period_;
     std::vector<uint8_t> signal_tape_;
-    const BarFeatures* feature_tape_ = nullptr;
-    size_t feature_tape_size_ = 0;
+    const IntelligenceState* intelligence_tape_ = nullptr;
+    size_t intelligence_tape_size_ = 0;
 };
 
 // ── Inline signal-to-decision builder (no virtual dispatch) ─

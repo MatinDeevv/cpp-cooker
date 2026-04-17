@@ -12,8 +12,7 @@
 #include "aphelion/strategy.h"
 #include "aphelion/data_ingest.h"
 #include "aphelion/replay_engine.h"
-#include "aphelion/features.h"
-#include "aphelion/regime.h"
+#include "aphelion/intelligence.h"
 #include "aphelion/risk_manager.h"
 #include <vector>
 #include <memory>
@@ -67,6 +66,7 @@ struct TournamentConfig {
     FeatureConfig feature_config;
     RegimeConfig  regime_config;
     RiskConfig    risk_config;
+    std::vector<MultiTimeframeInput> context_inputs;
 };
 
 class Tournament {
@@ -81,14 +81,14 @@ public:
     const BarTape& tape() const { return tape_; }
     const TournamentConfig& config() const { return config_; }
     const ReplayStats& last_stats() const { return last_stats_; }
-    const FeatureTape& feature_tape() const { return feature_tape_; }
+    const IntelligenceTape& intelligence_tape() const { return intelligence_tape_; }
 
 private:
     TournamentConfig             config_;
     const BarTape&               tape_;
     std::vector<TournamentEntry> entries_;
     ReplayStats                  last_stats_;
-    FeatureTape                  feature_tape_;
+    IntelligenceTape             intelligence_tape_;
 
     // V3: Compute composite quality score for ranking
     static double compute_composite_score(const LeaderboardRow& row);

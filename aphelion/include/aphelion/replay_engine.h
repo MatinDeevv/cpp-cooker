@@ -21,7 +21,7 @@
 #include "aphelion/account.h"
 #include "aphelion/strategy.h"
 #include "aphelion/execution.h"
-#include "aphelion/features.h"
+#include "aphelion/intelligence.h"
 #include "aphelion/risk_manager.h"
 #include <vector>
 
@@ -36,7 +36,7 @@ struct ReplayStats {
     size_t   total_signals       = 0;
     size_t   total_skipped_liq   = 0;
     size_t   total_risk_vetoes   = 0;  // V3: trades vetoed by risk manager
-    size_t   total_regime_skips  = 0;  // V3: signals skipped due to regime
+    size_t   total_regime_skips  = 0;  // V3: signals skipped by intelligence gating
     double   elapsed_seconds     = 0.0;
     double   acct_bars_per_sec   = 0.0;
 };
@@ -68,7 +68,7 @@ ReplayStats run_replay_v3(
     size_t tape_size,
     std::vector<ReplayEntry>& entries,
     RunMode mode,
-    const BarFeatures* features,     // precomputed, may be nullptr for V2 fallback
+    const IntelligenceState* intelligence, // precomputed, may be nullptr for V2 fallback
     const RiskConfig& risk_config = RiskConfig{}
 );
 

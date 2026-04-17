@@ -1,0 +1,64 @@
+================================================================
+ APHELION RESEARCH — Simulation Engine v3.0.0
+================================================================
+ Symbol:       XAUUSD
+ Timeframe:    H1
+ Accounts:     50
+ Max leverage: 500
+ Risk/trade:   0.01
+ Stop-out:     50%
+ Strategy:     SmaCrossover (V2) (id=0)
+ Mode:         BENCHMARK
+ Data root:    C:\Users\marti\LLM\data_sim_ready
+ Output:       output
+================================================================
+
+[phase 1] Initializing calendar...
+
+[phase 2] Loading market data...
+[ingest] Loading 1 parquet files for XAUUSD H1... 93384 bars loaded (7 MB tape)
+[phase 2] Data loaded in 0.0219635 s
+  Primary bars:  93384
+  Tape size:     7 MB
+
+[phase 3] Setting up tournament...
+[tournament] Initialized 50 accounts (strategy=0) with SMA periods [5-50] / [20-200]
+
+[phase 4] Running simulation...
+[tournament] Building unified intelligence tape...[features] Computed 93384 bar features (7295 KB feature tape)
+[regime] Classification complete over 93384 bars:
+  TRENDING_UP: 10618 (11.4%)
+  TRENDING_DOWN: 6516 (7.0%)
+  RANGE_BOUND: 64017 (68.6%)
+  VOLATILE_EXPANSION: 3 (0.0%)
+  COMPRESSION: 181 (0.2%)
+  TRANSITION: 12049 (12.9%)
+[intelligence] Unified tape built over 93384 bars using 0 context timeframe(s)
+ done
+[tournament] Preparing strategies... done
+[tournament] Running replay over 93384 bars x 50 accounts...
+[tournament] Replay complete:
+  Bars processed:   93384
+  Accounts:         50
+  Total fills:      57899
+  Total rejects:    12415
+  Total stop-outs:  0
+  Total SL/TP:      43308
+  Total signals:    77648
+  Risk vetoes:      7334
+  Intelligence skips:0
+  Skipped (liq):    0
+  Elapsed:          0.0 s
+  Bars/sec:         3162011
+  Acct*Bars/sec:    158100571
+
+================================================================
+ BENCHMARK COMPLETE
+ Replay:           0.0 s
+ Acct*Bars/sec:    158100571
+ Total elapsed:    0.2 s
+ Data load:        0.0 s
+ Signals fired:    77648
+ Fills:            57899
+ SL/TP exits:      43308
+================================================================

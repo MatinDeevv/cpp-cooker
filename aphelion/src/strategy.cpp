@@ -189,13 +189,13 @@ void ContextAwareSmaStrategy::prepare(const Bar* tape, size_t tape_size) {
     }
 }
 
-void ContextAwareSmaStrategy::prepare_with_features(
+void ContextAwareSmaStrategy::prepare_with_intelligence(
     const Bar* tape, size_t tape_size,
-    const BarFeatures* features
+    const IntelligenceState* intelligence
 ) {
     prepare(tape, tape_size);
-    feature_tape_ = features;
-    feature_tape_size_ = tape_size;
+    intelligence_tape_ = intelligence;
+    intelligence_tape_size_ = tape_size;
 }
 
 StrategyDecision ContextAwareSmaStrategy::decide(
@@ -217,11 +217,11 @@ StrategyDecision ContextAwareSmaStrategy::decide(
     );
 }
 
-StrategyDecision ContextAwareSmaStrategy::decide_with_context(
+StrategyDecision ContextAwareSmaStrategy::decide_with_intelligence(
     const MarketState& market,
     const AccountState& account,
     size_t bar_index,
-    const BarFeatures& feat
+    const IntelligenceState& intelligence
 ) {
     Signal sig = signal_at(bar_index);
     if (sig == Signal::NONE) {
@@ -242,54 +242,45 @@ StrategyDecision ContextAwareSmaStrategy::decide_with_context(
     if (atr_proxy <= 0.0) atr_proxy = close * 0.001;
 
     bool has_position = (account.open_position_count > 0);
-    Regime regime = static_cast<Regime>(feat.regime);
+    const Regime regime = intelligence.regime;
+    const bool is_bullish_signal = (sig == Signal::BULLISH_CROSS);
+    const bool bias_agrees = is_bullish_signal
+        ? (intelligence.directional_bias >= -0.05f)
+        : (intelligence.directional_bias <= 0.05f);
+    const bool regime_favorable =
+        (is_bullish_signal && (regime == Regime::TRENDING_UP || regime == Regime::VOLATILE_EXPANSION)) ||
+        (!is_bullish_signal && (regime == Regime::TRENDING_DOWN || regime == Regime::VOLATILE_EXPANSION));
 
     // ── Regime gating ───────────────────────────────────────
-    // Skip new entries during transitions (unstable)
-    if (!has_position && regime == Regime::TRANSITION) {
-        return d; // HOLD — wait for regime to settle
+    if (!has_position && (regime == Regime::TRANSITION || intelligence.context_validity < 0.35f)) {
+        return d;
     }
 
-    // ── Direction agreement check ───────────────────────────
-    bool is_bullish_signal = (sig == Signal::BULLISH_CROSS);
-    bool trend_agrees = is_bullish_signal
-        ? (feat.trend_alignment > 0.0f)
-        : (feat.trend_alignment < 0.0f);
+    if (!has_position && !bias_agrees && intelligence.bias_strength > 0.25f) {
+        return d;
+    }
 
-    bool htf_agrees = is_bullish_signal
-        ? (feat.htf_bias > 0.0f || feat.htf_bias == 0.0f) // neutral = don't block
-        : (feat.htf_bias < 0.0f || feat.htf_bias == 0.0f);
+    const float confidence_score =
+        intelligence.bias_strength * 0.45f +
+        intelligence.context_validity * 0.30f +
+        (bias_agrees ? 0.15f : 0.0f) +
+        (regime_favorable ? 0.10f : 0.0f);
 
-    // ── Confidence computation ──────────────────────────────
-    int agreement_count = 0;
-    if (trend_agrees) agreement_count++;
-    if (htf_agrees) agreement_count++;
-
-    // Momentum agreement
-    bool momentum_agrees = is_bullish_signal
-        ? (feat.momentum_short > 0.0f)
-        : (feat.momentum_short < 0.0f);
-    if (momentum_agrees) agreement_count++;
-
-    // Regime suitability
-    bool regime_favorable = (regime == Regime::TRENDING_UP && is_bullish_signal) ||
-                            (regime == Regime::TRENDING_DOWN && !is_bullish_signal) ||
-                            (regime == Regime::VOLATILE_EXPANSION);
-    if (regime_favorable) agreement_count++;
-
-    // Map agreement to confidence
-    if (agreement_count >= 4) d.confidence = Confidence::HIGH;
-    else if (agreement_count >= 2) d.confidence = Confidence::MEDIUM;
+    if (confidence_score >= 0.90f) d.confidence = Confidence::EXTREME;
+    else if (confidence_score >= 0.72f) d.confidence = Confidence::HIGH;
+    else if (confidence_score >= 0.45f) d.confidence = Confidence::MEDIUM;
     else d.confidence = Confidence::LOW;
 
     // ── Preferred regime ────────────────────────────────────
     d.preferred_regime = is_bullish_signal ? Regime::TRENDING_UP : Regime::TRENDING_DOWN;
 
-    // ── Dynamic stop/TP based on volatility ─────────────────
-    // High volatility → wider stops. Low volatility → tighter stops.
-    float vol_mult = 1.0f;
-    if (feat.volatility_percentile > 0.7f) vol_mult = 1.5f;
-    else if (feat.volatility_percentile < 0.3f) vol_mult = 0.75f;
+    float vol_mult = 1.0f + std::max(0.0f, intelligence.volatility_state) * 0.40f;
+    if (intelligence.volatility_state < -0.20f) {
+        vol_mult *= 0.85f;
+    }
+    if (regime == Regime::COMPRESSION) {
+        vol_mult *= 0.90f;
+    }
 
     double sl_distance = atr_proxy * 2.0 * vol_mult;
     double tp_distance = atr_proxy * 3.0 * vol_mult;

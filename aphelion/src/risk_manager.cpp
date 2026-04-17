@@ -57,14 +57,14 @@ AccountRiskContext AccountRiskContext::from_account(
 
 RiskModulation compute_risk_modulation(
     const StrategyDecision& decision,
-    const BarFeatures& features,
+    const IntelligenceState& intelligence,
     const AccountRiskContext& account_ctx,
     const RiskConfig& config
 ) {
     RiskModulation mod;
     mod.size_scale = 1.0f;
     mod.veto = false;
-    mod.effective_regime = static_cast<Regime>(features.regime);
+    mod.effective_regime = intelligence.regime;
 
     // ── 1. Confidence scaling ───────────────────────────────
     switch (decision.confidence) {
@@ -91,14 +91,14 @@ RiskModulation compute_risk_modulation(
     }
 
     // ── 3. Volatility modulation ────────────────────────────
-    if (features.volatility_percentile > config.vol_high_threshold) {
+    if (intelligence.features.volatility_percentile > config.vol_high_threshold) {
         mod.size_scale *= config.vol_high_scale;
-    } else if (features.volatility_percentile < config.vol_low_threshold) {
+    } else if (intelligence.features.volatility_percentile < config.vol_low_threshold) {
         mod.size_scale *= config.vol_low_scale;
     }
 
     // ── 4. Regime compatibility ─────────────────────────────
-    Regime current_regime = static_cast<Regime>(features.regime);
+    Regime current_regime = intelligence.regime;
     if (decision.preferred_regime != Regime::UNKNOWN &&
         decision.preferred_regime != current_regime) {
         if (config.reject_on_regime_mismatch) {
@@ -113,7 +113,14 @@ RiskModulation compute_risk_modulation(
         mod.size_scale *= config.loss_streak_scale;
     }
 
-    // ── 6. Regime-specific adjustments ──────────────────────
+    // ── 6. Shared intelligence validity ────────────────────
+    if (intelligence.context_validity < config.context_validity_floor) {
+        mod.veto = true;
+    } else if (intelligence.context_validity < 0.50f) {
+        mod.size_scale *= config.low_validity_scale;
+    }
+
+    // ── 7. Regime-specific adjustments ──────────────────────
     // In transition regimes, reduce aggression
     if (current_regime == Regime::TRANSITION) {
         mod.size_scale *= 0.7f;

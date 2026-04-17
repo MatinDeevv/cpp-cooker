@@ -19,7 +19,7 @@
 // ============================================================
 
 #include "aphelion/types.h"
-#include "aphelion/features.h"
+#include "aphelion/intelligence.h"
 
 namespace aphelion {
 
@@ -49,6 +49,10 @@ struct RiskConfig {
     // Loss streak throttling
     int   loss_streak_threshold    = 3;       // consecutive losses to trigger
     float loss_streak_scale        = 0.5f;    // scale after streak
+
+    // Unified intelligence gating
+    float context_validity_floor   = 0.25f;   // below this, veto entries
+    float low_validity_scale       = 0.65f;   // reduce size in weak contexts
 };
 
 // ── Account performance context (computed at runtime) ───────
@@ -78,7 +82,7 @@ struct RiskModulation {
 // Called per signal bar per account. Pure arithmetic, no alloc.
 RiskModulation compute_risk_modulation(
     const StrategyDecision& decision,
-    const BarFeatures& features,
+    const IntelligenceState& intelligence,
     const AccountRiskContext& account_ctx,
     const RiskConfig& config = RiskConfig{}
 );
